@@ -1,0 +1,12 @@
+[profile.default]
+src = "contracts"
+out = "contracts/out"
+libs = ["lib"]
+ffi = true
+fs_permissions = [{ access = "read-write", path = "./test"}]
+fuzz_runs = 1
+via_ir = true
+
+[profile.ci]
+fuzz_runs = 100  # Use more fuzz runs in CI
+ffi = true 

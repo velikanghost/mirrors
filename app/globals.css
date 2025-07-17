@@ -1,0 +1,127 @@
+@import 'tailwindcss';
+
+/* Import retro fonts */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
+:root {
+  /* Retro Gaming Colors - All HSL */
+  --primary: 120 100% 50%; /* Neon green */
+  --primary-glow: 120 100% 70%; /* Bright green glow */
+  --accent: 60 100% 50%; /* Electric yellow */
+  --ghost: 280 100% 70%; /* Purple for ghost mode */
+  --success: 150 100% 40%; /* Green for success */
+  --warning: 30 100% 50%; /* Orange for warnings */
+  --destructive: 0 100% 50%; /* Red for danger */
+
+  /* Gaming Gradients */
+  --gradient-pit: linear-gradient(
+    135deg,
+    hsl(240 100% 5%),
+    hsl(280 100% 10%),
+    hsl(120 50% 5%)
+  );
+  --gradient-retro: linear-gradient(
+    45deg,
+    hsl(var(--primary)),
+    hsl(var(--accent))
+  );
+
+  /* Glows and Effects */
+  --glow-primary: 0 0 20px hsl(var(--primary) / 0.6);
+  --shadow-retro: 0 0 30px hsl(var(--primary) / 0.4);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-retro: 'Orbitron', sans-serif;
+  --font-pixel: 'JetBrains Mono', monospace;
+}
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes retro-glow {
+  0%,
+  100% {
+    text-shadow: var(--glow-primary);
+  }
+  50% {
+    text-shadow: var(--glow-primary), 0 0 40px hsl(var(--primary) / 0.8);
+  }
+}
+
+@keyframes pixel-jump {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes retro-bounce {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.bg-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    hsl(var(--primary) / 0.1) 2px,
+    hsl(var(--primary) / 0.1) 4px
+  );
+}
+
+.bg-pixel-grid {
+  background-image: linear-gradient(
+      hsl(var(--primary) / 0.1) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, hsl(var(--primary) / 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.retro-border {
+  @apply border-2 border-primary/30 rounded-lg shadow-[0_0_10px_rgba(0,255,0,0.2)];
+}
+
+.animate-blink {
+  animation: blink 2s infinite;
+}
+
+.animate-retro-glow {
+  animation: retro-glow 2s infinite;
+}
+
+.animate-pixel-jump {
+  animation: pixel-jump 0.5s infinite;
+}
+
+.animate-retro-bounce {
+  animation: retro-bounce 1s infinite;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
