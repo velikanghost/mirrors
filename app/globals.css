@@ -1,43 +1,10 @@
 @import 'tailwindcss';
-@import './styles/animations.css';
 
-:root {
-  /* Tailwind v4 color tokens (HSL values without alpha) */
-  --color-primary: 120 100% 50%; /* Neon green */
-  --color-accent: 60 100% 50%; /* Electric yellow */
-  --color-ghost: 280 100% 70%; /* Purple for ghost mode */
-  --color-success: 150 100% 40%; /* Green for success */
-  --color-warning: 30 100% 50%; /* Orange for warnings */
-  --color-destructive: 0 100% 50%; /* Red for danger */
-
-  /* Additional effects */
-  --primary-glow: 120 100% 70%; /* Bright green glow */
-
-  /* Gaming Gradients */
-  --gradient-pit: linear-gradient(
-    135deg,
-    hsl(240 100% 5%),
-    hsl(280 100% 10%),
-    hsl(120 50% 5%)
-  );
-  --gradient-retro: linear-gradient(
-    45deg,
-    hsl(var(--color-primary)),
-    hsl(var(--color-accent))
-  );
-
-  /* Glows and Effects */
-  --glow-primary: 0 0 20px hsl(var(--color-primary) / 0.6);
-  --shadow-retro: 0 0 30px hsl(var(--color-primary) / 0.4);
-}
-
-@theme inline {
-  --color-primary: var(--color-primary);
-  --color-accent: var(--color-accent);
-  --color-ghost: var(--color-ghost);
-  --color-success: var(--color-success);
-  --color-warning: var(--color-warning);
-  --color-destructive: var(--color-destructive);
+@theme {
+  --color-neon: 120 100% 50%;
+  --color-dark: 0 0% 4%;
+  --color-card: 0 0% 2%;
+  --color-yellow: 60 100% 50%;
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -45,49 +12,229 @@
   --font-pixel: var(--font-pixel);
 }
 
-/* Background Effects */
-.bg-scanlines {
-  background-image: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    hsl(var(--primary) / 0.1) 2px,
-    hsl(var(--primary) / 0.1) 4px
-  );
+body {
+  background-color: hsl(var(--color-dark));
+  color: hsl(var(--color-neon));
+  font-family: var(--font-pixel);
 }
 
-.bg-pixel-grid {
+/* Scanlines effect */
+.scanlines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    hsl(var(--color-neon) / 0.03) 0px,
+    hsl(var(--color-neon) / 0.03) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+}
+
+/* Grid background */
+.grid-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background-image: linear-gradient(
-      hsl(var(--primary) / 0.1) 1px,
+      hsl(var(--color-neon) / 0.1) 1px,
       transparent 1px
     ),
-    linear-gradient(90deg, hsl(var(--primary) / 0.1) 1px, transparent 1px);
+    linear-gradient(90deg, hsl(var(--color-neon) / 0.1) 1px, transparent 1px);
   background-size: 20px 20px;
+  pointer-events: none;
 }
 
-/* Utility Classes */
-.animate-blink {
-  animation: blink 2s infinite;
+/* Terminal section */
+.terminal-section {
+  background: hsl(var(--color-card));
+  border: 1px solid hsl(var(--color-neon));
+  box-shadow: 0 0 10px hsl(var(--color-neon) / 0.1);
+  padding: 1.5rem;
+  border-radius: 4px;
 }
 
-.animate-retro-glow {
-  animation: retro-glow 2s infinite;
+/* Terminal header */
+.terminal-header {
+  color: hsl(var(--color-neon));
+  font-family: var(--font-pixel);
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+  opacity: 0.9;
 }
 
-.animate-pixel-jump {
-  animation: pixel-jump 0.5s infinite;
+.terminal-header::before {
+  content: '> > ';
+  color: hsl(var(--color-neon));
 }
 
-.animate-retro-bounce {
-  animation: retro-bounce 1s infinite;
+/* Status cards */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
 }
 
-.retro-border {
-  @apply border-2 border-primary/30 rounded-lg shadow-[0_0_10px_rgba(0,255,0,0.2)];
+.status-card {
+  background: hsl(var(--color-card));
+  border: 1px solid hsl(var(--color-neon));
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 2px;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
+.status-card-value {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.status-card-label {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+
+/* Progress bars */
+.progress-container {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-bottom: 0.25rem;
+}
+
+.progress-bar {
+  height: 4px;
+  background: hsl(var(--color-neon) / 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: hsl(var(--color-neon));
+  transition: width 0.3s ease;
+}
+
+/* Pattern grid */
+.pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.pattern-slot {
+  aspect-ratio: 1;
+  border: 1px solid hsl(var(--color-neon));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-pixel);
+  font-size: 0.875rem;
+  background: hsl(var(--color-card));
+  color: hsl(var(--color-neon) / 0.5);
+}
+
+.pattern-slot.filled {
+  color: hsl(var(--color-neon));
+  background: hsl(var(--color-neon) / 0.1);
+}
+
+/* Action buttons */
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+}
+
+.action-button {
+  aspect-ratio: 1;
+  border: 1px solid hsl(var(--color-neon));
+  background: transparent;
+  color: hsl(var(--color-neon));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--font-pixel);
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.action-button:hover {
+  background: hsl(var(--color-neon));
+  color: hsl(var(--color-card));
+}
+
+.action-button.selected {
+  background: hsl(var(--color-neon) / 0.2);
+}
+
+/* Player grid */
+.player-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.player-card {
+  background: hsl(var(--color-card));
+  border: 1px solid hsl(var(--color-neon));
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.player-indicator {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: hsl(var(--color-neon));
+  color: hsl(var(--color-card));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Top survivors */
+.survivors-list {
+  margin-top: 1rem;
+}
+
+.survivor-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+}
+
+.survivor-row .rank {
+  opacity: 0.7;
+}
+
+.survivor-row .status {
+  color: hsl(var(--color-neon));
+  font-size: 0.75rem;
 }

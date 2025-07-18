@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import {
-  Users,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   ChevronDown,
-  ArrowUp,
   RotateCw,
+  Trophy,
+  Timer,
+  Users,
 } from 'lucide-react'
 import { GamePhase } from '@/app/types/game'
 import { LobbyScreen } from './LobbyScreen'
@@ -20,107 +21,156 @@ export const GameArena = () => {
   // Game state management
   const [gamePhase, setGamePhase] = useState<GamePhase>('lobby')
   const [currentRound, setCurrentRound] = useState(1)
-  const [playersAlive, setPlayersAlive] = useState(0)
-  const [isGhostMode, setIsGhostMode] = useState(false)
-  const [isSuddenDeath, setIsSuddenDeath] = useState(false)
-  const [patternLength, setPatternLength] = useState(4)
-  const [availableActions, setAvailableActions] = useState(ACTIONS)
+  const [playersAlive, setPlayersAlive] = useState(47)
+  const [totalPlayers, setTotalPlayers] = useState(100)
+  const [timeLeft, setTimeLeft] = useState(30)
+  const [jackpot, setJackpot] = useState(1000)
+  const [pattern, setPattern] = useState<string[]>([])
 
-  // Dynamic game pressure mechanics
+  // Timer effect
   useEffect(() => {
-    if (currentRound >= 8) {
-      setPatternLength(3)
-      setAvailableActions(ACTIONS.slice(0, 4))
-    }
-
-    if (playersAlive <= 10) {
-      setIsGhostMode(true)
-    }
-
-    if (playersAlive <= 5) {
-      setIsSuddenDeath(true)
-      setPatternLength(2)
-      setAvailableActions(ACTIONS.slice(0, 3))
-    }
-  }, [currentRound, playersAlive])
+    if (gamePhase !== 'playing' || timeLeft <= 0) return
+    const timer = setInterval(
+      () => setTimeLeft((t) => Math.max(0, t - 1)),
+      1000,
+    )
+    return () => clearInterval(timer)
+  }, [gamePhase, timeLeft])
 
   return (
-    <div className="min-h-screen bg-gradient-pit relative overflow-hidden">
+    <div className="min-h-screen bg-dark text-neon relative p-6">
       {/* Background Effects */}
-      <div className="absolute inset-0 bg-pixel-grid opacity-30" />
-      <div className="absolute inset-0 bg-scanlines opacity-50" />
+      <div className="scanlines" />
+      <div className="grid-bg" />
 
-      {/* Content Container */}
-      <div className="relative z-10 container mx-auto px-4 py-8">
-        {/* Game Header */}
-        <div className="text-center space-y-8 max-w-4xl mx-auto mb-12">
-          <h1 className="text-8xl font-retro font-black text-primary animate-retro-glow">
-            MIRROR PIT
-          </h1>
-          <div className="font-pixel text-accent text-lg animate-blink">
-            &gt; REAL-TIME PVP SURVIVAL GAME &lt;
-          </div>
-        </div>
-
-        {/* Game Status */}
-        <div className="grid grid-cols-3 gap-6 mb-8">
-          <div className="retro-border bg-card/80 backdrop-blur-sm p-6 text-center">
-            <Users className="w-8 h-8 text-accent mx-auto mb-3 animate-blink" />
-            <div className="text-3xl font-pixel font-bold text-primary">
-              {playersAlive}
-            </div>
-            <div className="text-xs font-pixel text-muted-foreground uppercase">
-              PLAYERS_ALIVE
-            </div>
-          </div>
-
-          <div className="retro-border bg-card/80 backdrop-blur-sm p-6 text-center">
-            <div className="text-3xl font-pixel font-bold text-primary">
-              ROUND_{currentRound}
-            </div>
-            <div className="text-xs font-pixel text-muted-foreground uppercase">
-              CURRENT_ROUND
-            </div>
-          </div>
-
-          {isGhostMode && (
-            <div className="retro-border bg-card/80 backdrop-blur-sm p-6 text-center">
-              <div className="text-3xl font-pixel font-bold text-ghost animate-pulse">
-                GHOST_MODE
+      {gamePhase === 'lobby' ? (
+        <LobbyScreen
+          playersReady={playersAlive}
+          totalJackpot={jackpot}
+          secondsToStart={timeLeft}
+          onStart={() => setGamePhase('playing')}
+        />
+      ) : (
+        <div className="container mx-auto relative z-10">
+          {/* System Status */}
+          <div className="terminal-section mb-6">
+            <div className="terminal-header">SYSTEM_STATUS</div>
+            <div className="status-grid">
+              <div className="status-card">
+                <Users className="w-6 h-6" />
+                <div className="status-card-value">{playersAlive}</div>
+                <div className="status-card-label">Alive</div>
               </div>
-              <div className="text-xs font-pixel text-ghost uppercase">
-                BEWARE_THE_DEAD
+              <div className="status-card">
+                <Trophy className="w-6 h-6 text-yellow" />
+                <div className="status-card-value">${jackpot}</div>
+                <div className="status-card-label">Jackpot</div>
+              </div>
+              <div className="status-card">
+                <Timer className="w-6 h-6" />
+                <div className="status-card-value">{timeLeft}s</div>
+                <div className="status-card-label">Time Left</div>
+              </div>
+              <div className="status-card">
+                <div className="status-card-value">
+                  {Math.round((playersAlive / totalPlayers) * 100)}%
+                </div>
+                <div className="status-card-label">Survival</div>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Game Phase Content */}
-        {gamePhase === 'lobby' && (
-          <LobbyScreen onStart={() => setGamePhase('playing')} />
-        )}
-        {gamePhase === 'playing' && (
-          <PatternSubmission
-            patternLength={patternLength}
-            availableActions={availableActions}
-            isGhostMode={isGhostMode}
-          />
-        )}
-        {gamePhase === 'victory' && (
-          <VictoryScreen
-            winners={['0x1234...5678']} // TODO: Replace with actual winners
-            prizePool={0.08} // TODO: Replace with actual prize pool
-            onPlayAgain={() => setGamePhase('lobby')}
-          />
-        )}
-
-        {/* Game Warnings */}
-        {isSuddenDeath && (
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-destructive font-pixel animate-retro-glow text-center">
-            &gt; SUDDEN_DEATH_ACTIVATED - PATTERN_LENGTH_REDUCED &lt;
+            {/* Progress Bars */}
+            <div className="progress-container">
+              <div>
+                <div className="progress-label">
+                  <span>Players Remaining</span>
+                  <span>
+                    {playersAlive}/{totalPlayers}
+                  </span>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-bar-fill"
+                    style={{ width: `${(playersAlive / totalPlayers) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="progress-label">
+                  <span>Round Timer</span>
+                  <span>{timeLeft}s</span>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-bar-fill"
+                    style={{ width: `${(timeLeft / 30) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          <div className="grid grid-cols-3 gap-6">
+            {/* Pattern Input Terminal */}
+            <div className="col-span-2">
+              <div className="terminal-section">
+                <div className="terminal-header">PATTERN_INPUT_TERMINAL</div>
+                <PatternSubmission
+                  patternLength={5}
+                  availableActions={ACTIONS}
+                  isGhostMode={playersAlive <= 10}
+                />
+              </div>
+            </div>
+
+            {/* Player Grid */}
+            <div className="terminal-section">
+              <div className="terminal-header">PLAYER_GRID</div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    <span>{playersAlive} Players Alive</span>
+                  </div>
+                  <span>
+                    {Math.round((playersAlive / totalPlayers) * 100)}% Survival
+                  </span>
+                </div>
+
+                <div>
+                  <div className="text-sm mb-2">
+                    • Survivors ({playersAlive})
+                  </div>
+                  <div className="player-grid">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <div key={i} className="player-card">
+                        <div className="player-indicator">
+                          {i === 0 ? 'YO' : 'PL'}
+                        </div>
+                        <span>{i === 0 ? 'You' : `Player ${i}`}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm mb-2">• Top Survivors</div>
+                  <div className="survivors-list">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="survivor-row">
+                        <span className="rank">
+                          {i + 1}. {i === 0 ? 'You' : `Player ${i}`}
+                        </span>
+                        <span className="status">Active</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -128,8 +178,7 @@ export const GameArena = () => {
 const ACTIONS = [
   { name: 'LEFT', icon: ChevronLeft },
   { name: 'RIGHT', icon: ChevronRight },
-  { name: 'UP', icon: ChevronUp },
-  { name: 'DOWN', icon: ChevronDown },
-  { name: 'JUMP', icon: ArrowUp },
+  { name: 'JUMP', icon: ChevronUp },
   { name: 'SPIN', icon: RotateCw },
+  { name: 'DUCK', icon: ChevronDown },
 ]

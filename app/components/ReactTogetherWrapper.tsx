@@ -8,6 +8,7 @@ import {
 import { createContext, useContext } from 'react'
 import { GameState, INITIAL_GAME_STATE } from '@/app/types/game'
 import { useSearchParams } from 'next/navigation'
+import { ConnectButton } from './ui/ConnectButton'
 
 interface ReactTogetherWrapperProps {
   children: React.ReactNode
@@ -72,6 +73,7 @@ export default function ReactTogetherWrapper({
 
                 <div className="flex items-center space-x-4">
                   <ConnectedUsersDisplay />
+                  <ConnectButton />
                 </div>
               </div>
             </div>

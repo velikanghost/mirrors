@@ -8,8 +8,10 @@ export const config = getDefaultConfig({
   chains: [monadTestnet],
 })
 
-export const myRainbowTheme = darkTheme({
-  accentColor: '#C2410C',
-  accentColorForeground: 'white',
-  borderRadius: 'large',
+export const mirrorPitTheme = darkTheme({
+  accentColor: '#2563eb', // primary blue
+  accentColorForeground: '#000000',
+  borderRadius: 'none', // for retro look
+  fontStack: 'system',
+  overlayBlur: 'small',
 })

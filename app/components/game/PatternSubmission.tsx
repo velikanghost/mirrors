@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { PatternSubmissionProps } from '@/app/types/game'
+import { Send } from 'lucide-react'
 
 export const PatternSubmission = ({
   patternLength,
@@ -26,46 +27,44 @@ export const PatternSubmission = ({
   }
 
   return (
-    <div className="space-y-8 max-w-2xl mx-auto">
+    <div className="space-y-6">
       {/* Pattern Display */}
-      <div className="retro-border bg-card/80 backdrop-blur-sm p-6">
-        <div className="text-xl font-pixel text-primary mb-4 text-center">
-          CURRENT PATTERN
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-sm">Your Pattern</div>
+          <div className="text-sm opacity-70">
+            {pattern.length}/{patternLength} moves
+          </div>
         </div>
-        <div className="grid grid-cols-5 gap-4 mb-6">
+        <div className="pattern-grid">
           {Array.from({ length: patternLength }).map((_, i) => (
             <div
               key={i}
               className={`
-                aspect-square retro-border flex items-center justify-center
-                ${
-                  pattern[i]
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-muted/20 text-muted-foreground'
-                }
+                pattern-slot
+                ${pattern[i] ? 'filled' : ''}
                 ${isGhostMode ? 'animate-pulse' : ''}
               `}
             >
-              <div className="font-pixel text-lg">{pattern[i] || '_'}</div>
+              {pattern[i] || `Move ${i + 1}`}
             </div>
           ))}
         </div>
+      </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-3 gap-4">
+      {/* Available Actions */}
+      <div>
+        <div className="text-sm mb-4">Available Actions</div>
+        <div className="action-grid">
           {availableActions.map((action) => (
             <button
               key={action.name}
               onClick={() => handleActionClick(action.name)}
               disabled={pattern.length >= patternLength}
               className={`
-                retro-border font-pixel text-sm p-4 flex flex-col items-center gap-2
-                ${
-                  pattern.includes(action.name)
-                    ? 'bg-accent/20 text-accent'
-                    : 'bg-primary/20 text-primary hover:bg-primary hover:text-background'
-                }
-                ${isGhostMode ? 'animate-pulse' : 'animate-pixel-jump'}
+                action-button
+                ${pattern.includes(action.name) ? 'selected' : ''}
+                ${isGhostMode ? 'animate-pulse' : ''}
               `}
             >
               <action.icon className="w-6 h-6" />
@@ -73,35 +72,31 @@ export const PatternSubmission = ({
             </button>
           ))}
         </div>
-
-        {/* Control Buttons */}
-        <div className="flex justify-between mt-8">
-          <button
-            onClick={handleClear}
-            className="retro-border font-pixel uppercase px-8 py-3 bg-destructive/20 text-destructive hover:bg-destructive hover:text-background"
-          >
-            CLEAR
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={pattern.length !== patternLength}
-            className={`
-              retro-border font-pixel uppercase px-8 py-3
-              ${
-                pattern.length === patternLength
-                  ? 'bg-success/20 text-success hover:bg-success hover:text-background animate-retro-bounce'
-                  : 'bg-muted/20 text-muted-foreground cursor-not-allowed'
-              }
-            `}
-          >
-            SUBMIT
-          </button>
-        </div>
       </div>
 
-      {/* Timer */}
-      <div className="text-center font-pixel text-destructive animate-blink">
-        TIME REMAINING: 00:30
+      {/* Control Buttons */}
+      <div className="flex justify-between pt-4">
+        <button
+          onClick={handleClear}
+          className="text-sm px-6 py-2 border border-neon hover:bg-neon hover:text-card transition-colors"
+        >
+          CLEAR
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={pattern.length !== patternLength}
+          className={`
+            text-sm px-6 py-2 bg-neon text-card flex items-center gap-2
+            ${
+              pattern.length === patternLength
+                ? 'opacity-100 hover:bg-neon/90'
+                : 'opacity-50 cursor-not-allowed'
+            }
+          `}
+        >
+          <Send className="w-4 h-4" />
+          SUBMIT PATTERN
+        </button>
       </div>
     </div>
   )
