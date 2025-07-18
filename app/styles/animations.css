@@ -1,0 +1,141 @@
+@keyframes retro-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes retro-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 5px theme('colors.primary.DEFAULT'),
+      0 0 10px theme('colors.primary.DEFAULT'),
+      0 0 15px theme('colors.primary.DEFAULT');
+  }
+  50% {
+    box-shadow: 0 0 10px theme('colors.primary.DEFAULT'),
+      0 0 20px theme('colors.primary.DEFAULT'),
+      0 0 30px theme('colors.primary.DEFAULT');
+  }
+}
+
+@keyframes pixel-jump {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.1);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes celebrate {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2) rotate(10deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes eliminate {
+  0% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2) rotate(180deg);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(0) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-retro-bounce {
+  animation: retro-bounce 1s ease-in-out infinite;
+}
+
+.animate-retro-glow {
+  animation: retro-glow 2s ease-in-out infinite;
+}
+
+.animate-pixel-jump {
+  animation: pixel-jump 0.5s ease-in-out;
+}
+
+.animate-shake {
+  animation: shake 0.5s cubic-bezier(0.36, 0, 0.66, -0.56) 3;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+.animate-fade-out {
+  animation: fade-out 0.3s ease-in forwards;
+}
+
+.animate-blink {
+  animation: blink 1s ease-in-out infinite;
+}
+
+.animate-celebrate {
+  animation: celebrate 1s ease-in-out;
+}
+
+.animate-eliminate {
+  animation: eliminate 1s ease-in-out forwards;
+}

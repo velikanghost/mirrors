@@ -1,140 +1,135 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useAccount } from 'wagmi'
-import { useConnectedUsers } from 'react-together'
-import { GameState, INITIAL_GAME_STATE, Player } from '@/app/types/game'
-import { useGameState } from '../ReactTogetherWrapper'
-import { PatternReveal } from './PatternReveal'
-import { GameStatus } from './GameStatus'
-import { RoundManager } from './RoundManager'
-import { VictoryScreen } from './VictoryScreen'
+import { useState, useEffect } from 'react'
+import {
+  Users,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ArrowUp,
+  RotateCw,
+} from 'lucide-react'
+import { GamePhase } from '@/app/types/game'
 import { LobbyScreen } from './LobbyScreen'
 import { PatternSubmission } from './PatternSubmission'
+import { GameStatus } from './GameStatus'
+import { VictoryScreen } from './VictoryScreen'
 
 export const GameArena = () => {
-  const { address } = useAccount()
-  const connectedUsers = useConnectedUsers()
-  const { state, setState: broadcast } = useGameState()
+  // Game state management
+  const [gamePhase, setGamePhase] = useState<GamePhase>('lobby')
+  const [currentRound, setCurrentRound] = useState(1)
+  const [playersAlive, setPlayersAlive] = useState(0)
+  const [isGhostMode, setIsGhostMode] = useState(false)
+  const [isSuddenDeath, setIsSuddenDeath] = useState(false)
+  const [patternLength, setPatternLength] = useState(4)
+  const [availableActions, setAvailableActions] = useState(ACTIONS)
 
-  // Initialize game state
+  // Dynamic game pressure mechanics
   useEffect(() => {
-    if (!state) {
-      broadcast(INITIAL_GAME_STATE)
+    if (currentRound >= 8) {
+      setPatternLength(3)
+      setAvailableActions(ACTIONS.slice(0, 4))
     }
-  }, [state, broadcast])
 
-  // Update players alive count
-  useEffect(() => {
-    if (state) {
-      const alive = Object.values(state.players).filter(
-        (p: Player) => !p.isEliminated,
-      ).length
-      if (alive !== state.playersAlive) {
-        broadcast({
-          ...state,
-          playersAlive: alive,
-        })
-      }
+    if (playersAlive <= 10) {
+      setIsGhostMode(true)
     }
-  }, [state, broadcast])
 
-  // Handle game pressure mechanics
-  useEffect(() => {
-    if (state) {
-      const newState = { ...state }
-      let hasChanges = false
-
-      // Ghost mode when <= 10 players
-      if (state.playersAlive <= 10 && !state.isGhostMode) {
-        newState.isGhostMode = true
-        hasChanges = true
-      }
-
-      // Sudden death when <= 5 players
-      if (state.playersAlive <= 5 && !state.isSuddenDeath) {
-        newState.isSuddenDeath = true
-        newState.patternLength = 2
-        newState.availableActions = ['L', 'R', 'J']
-        hasChanges = true
-      }
-
-      if (hasChanges) {
-        broadcast(newState)
-      }
+    if (playersAlive <= 5) {
+      setIsSuddenDeath(true)
+      setPatternLength(2)
+      setAvailableActions(ACTIONS.slice(0, 3))
     }
-  }, [state?.playersAlive, broadcast])
-
-  // Join game
-  const handleJoinGame = () => {
-    if (state && address) {
-      const newPlayer: Player = {
-        address,
-        name: `Player_${address.slice(0, 6)}`,
-        isEliminated: false,
-      }
-
-      broadcast({
-        ...state,
-        players: {
-          ...state.players,
-          [address]: newPlayer,
-        },
-      })
-    }
-  }
-
-  // Reset game
-  const handlePlayAgain = () => {
-    broadcast(INITIAL_GAME_STATE)
-  }
-
-  if (!state) return null
+  }, [currentRound, playersAlive])
 
   return (
-    <div className="min-h-screen bg-gradient-pit">
+    <div className="min-h-screen bg-gradient-pit relative overflow-hidden">
+      {/* Background Effects */}
       <div className="absolute inset-0 bg-pixel-grid opacity-30" />
       <div className="absolute inset-0 bg-scanlines opacity-50" />
 
+      {/* Content Container */}
       <div className="relative z-10 container mx-auto px-4 py-8">
-        <GameStatus state={state} />
-        <RoundManager state={state} onStateChange={broadcast} />
+        {/* Game Header */}
+        <div className="text-center space-y-8 max-w-4xl mx-auto mb-12">
+          <h1 className="text-8xl font-retro font-black text-primary animate-retro-glow">
+            MIRROR PIT
+          </h1>
+          <div className="font-pixel text-accent text-lg animate-blink">
+            &gt; REAL-TIME PVP SURVIVAL GAME &lt;
+          </div>
+        </div>
 
-        {state.phase === 'lobby' && (
-          <LobbyScreen
-            onJoin={handleJoinGame}
-            connectedPlayers={Object.keys(state.players).length}
-            isJoined={!!address && !!state.players[address]}
-          />
+        {/* Game Status */}
+        <div className="grid grid-cols-3 gap-6 mb-8">
+          <div className="retro-border bg-card/80 backdrop-blur-sm p-6 text-center">
+            <Users className="w-8 h-8 text-accent mx-auto mb-3 animate-blink" />
+            <div className="text-3xl font-pixel font-bold text-primary">
+              {playersAlive}
+            </div>
+            <div className="text-xs font-pixel text-muted-foreground uppercase">
+              PLAYERS_ALIVE
+            </div>
+          </div>
+
+          <div className="retro-border bg-card/80 backdrop-blur-sm p-6 text-center">
+            <div className="text-3xl font-pixel font-bold text-primary">
+              ROUND_{currentRound}
+            </div>
+            <div className="text-xs font-pixel text-muted-foreground uppercase">
+              CURRENT_ROUND
+            </div>
+          </div>
+
+          {isGhostMode && (
+            <div className="retro-border bg-card/80 backdrop-blur-sm p-6 text-center">
+              <div className="text-3xl font-pixel font-bold text-ghost animate-pulse">
+                GHOST_MODE
+              </div>
+              <div className="text-xs font-pixel text-ghost uppercase">
+                BEWARE_THE_DEAD
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Game Phase Content */}
+        {gamePhase === 'lobby' && (
+          <LobbyScreen onStart={() => setGamePhase('playing')} />
         )}
-
-        {state.phase === 'pattern_submission' && address && (
+        {gamePhase === 'playing' && (
           <PatternSubmission
-            state={state}
-            playerAddress={address}
-            onSubmitPattern={(pattern: string) => {
-              broadcast({
-                ...state,
-                players: {
-                  ...state.players,
-                  [address]: {
-                    ...state.players[address],
-                    patternHash: pattern,
-                  },
-                },
-              })
-            }}
+            patternLength={patternLength}
+            availableActions={availableActions}
+            isGhostMode={isGhostMode}
+          />
+        )}
+        {gamePhase === 'victory' && (
+          <VictoryScreen
+            winners={['0x1234...5678']} // TODO: Replace with actual winners
+            prizePool={0.08} // TODO: Replace with actual prize pool
+            onPlayAgain={() => setGamePhase('lobby')}
           />
         )}
 
-        {state.phase === 'reveal' && address && (
-          <PatternReveal state={state} playerAddress={address} />
-        )}
-
-        {state.phase === 'victory' && (
-          <VictoryScreen state={state} onPlayAgain={handlePlayAgain} />
+        {/* Game Warnings */}
+        {isSuddenDeath && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-destructive font-pixel animate-retro-glow text-center">
+            &gt; SUDDEN_DEATH_ACTIVATED - PATTERN_LENGTH_REDUCED &lt;
+          </div>
         )}
       </div>
     </div>
   )
 }
+
+const ACTIONS = [
+  { name: 'LEFT', icon: ChevronLeft },
+  { name: 'RIGHT', icon: ChevronRight },
+  { name: 'UP', icon: ChevronUp },
+  { name: 'DOWN', icon: ChevronDown },
+  { name: 'JUMP', icon: ArrowUp },
+  { name: 'SPIN', icon: RotateCw },
+]

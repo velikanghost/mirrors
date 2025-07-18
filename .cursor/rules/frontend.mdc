@@ -1,0 +1,86 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# Frontend Development Rules
+
+You are developing the frontend using Next.js 15.
+
+## Framework Guidelines
+
+### Project Structure
+
+- Use Next.js 15 App Router
+- Organize components in `/components/` with subfolders: `ui/`, `forms/`
+- Place custom hooks in `/hooks/`
+- Use `/lib/` for utilities and API clients
+- Define TypeScript types in `/types/`
+
+### React Patterns
+
+- Use React 19 features including the React Compiler
+- Prefer function components with hooks
+- Use RTK Query for server state management and API calls
+- Use react-redux for global client state
+- Use Suspense and Error Boundaries for better UX
+- Don't include functions in dependency arrays unless they're memoized with useCallback
+- Don't auto-trigger side effects that cause state changes in useEffect
+- Don't use useContext at all
+
+### API Integration
+
+- Use RTK Query for all API calls and server state management
+- Axios is still required as a dependency for RTK Query's underlying HTTP calls
+
+### Authentication & Web3 Integration
+
+- Handle wallet connection states properly with Wagmi and RainbowKit
+- Use viem for blockchain interactions alongside Wagmi
+- Implement proper error handling for Web3 operations
+
+### Styling & Design
+
+- Use TailwindCSS for all styling
+- Implement responsive design (mobile-first approach)
+
+### Component Development
+
+- Create reusable UI components in `/components/ui/`
+- Use compound component patterns for complex components
+- Implement proper prop validation with TypeScript
+- Use forwardRef for components that need ref forwarding
+- Follow consistent naming conventions
+
+### State Management
+
+- Use RTK Query for API data fetching, caching, and server state
+- Use react-redux for global client state
+- Use local component state for UI-specific data
+- Implement optimistic updates where appropriate
+- **DO NOT use Zustand** - stick to react-redux + RTK Query architecture
+
+### Performance Optimization
+
+- Use Next.js Image component for all images
+- Implement code splitting with dynamic imports
+- Use React.memo for expensive components
+- Implement proper caching strategies with RTK Query
+- Optimize bundle size with tree shaking
+
+### Accessibility & UX
+
+- Use semantic HTML elements
+- Implement proper ARIA attributes
+- Ensure keyboard navigation works
+- Use proper color contrast ratios
+- Implement loading states and error boundaries
+
+### Testing & Quality
+
+- Use TypeScript strict mode
+- Follow ESLint and Prettier configurations
+- Write unit tests with React Testing Library
+- Test accessibility features
+- Implement integration tests for critical flows

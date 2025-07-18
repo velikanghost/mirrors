@@ -7,6 +7,7 @@ import {
 } from 'react-together'
 import { createContext, useContext } from 'react'
 import { GameState, INITIAL_GAME_STATE } from '@/app/types/game'
+import { useSearchParams } from 'next/navigation'
 
 interface ReactTogetherWrapperProps {
   children: React.ReactNode
@@ -41,12 +42,13 @@ function GameStateProvider({ children }: { children: React.ReactNode }) {
 export default function ReactTogetherWrapper({
   children,
 }: ReactTogetherWrapperProps) {
+  const searchParams = useSearchParams()
+  const roomCode = searchParams.get('room') || 'default'
+
   const sessionParams = {
-    appId:
-      process.env.NEXT_PUBLIC_DEFAULT_APP_ID ||
-      'io.multisynq.next-react-together',
+    appId: process.env.NEXT_PUBLIC_DEFAULT_APP_ID || 'mirror-pit',
     apiKey: process.env.NEXT_PUBLIC_MULTISYNQ_API_KEY || 'YOUR_API_KEY_HERE',
-    name: process.env.NEXT_PUBLIC_DEFAULT_SESSION_NAME || 'default-session',
+    name: roomCode,
     password: process.env.NEXT_PUBLIC_DEFAULT_SESSION_PASSWORD || 'demo123',
   }
 
@@ -64,9 +66,7 @@ export default function ReactTogetherWrapper({
                     <h1 className="text-xl font-bold text-gradient">
                       Mirror Pit
                     </h1>
-                    <p className="text-xs text-text-subtle">
-                      Real-time PvP Game
-                    </p>
+                    <p className="text-xs text-text-subtle">Room: {roomCode}</p>
                   </div>
                 </div>
 

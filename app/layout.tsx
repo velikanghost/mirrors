@@ -1,6 +1,6 @@
 'use client'
 
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Geist, Geist_Mono, Orbitron, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import dynamic from 'next/dynamic'
 
@@ -28,13 +28,15 @@ const Providers = dynamic(
   },
 )
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
   subsets: ['latin'],
 })
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const orbitron = Orbitron({ variable: '--font-retro', subsets: ['latin'] })
+const jetBrains = JetBrains_Mono({
+  variable: '--font-pixel',
   subsets: ['latin'],
 })
 
@@ -46,7 +48,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${orbitron.variable} ${jetBrains.variable} antialiased`}
       >
         <Providers>
           <ReactTogetherWrapper>{children}</ReactTogetherWrapper>

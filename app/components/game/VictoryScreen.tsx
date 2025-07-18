@@ -1,48 +1,58 @@
 'use client'
 
 import { Trophy } from 'lucide-react'
-import { GameState } from '@/app/types/game'
+import { VictoryScreenProps } from '@/app/types/game'
 
-interface VictoryScreenProps {
-  state: GameState
-  onPlayAgain: () => void
-}
-
-export const VictoryScreen = ({ state, onPlayAgain }: VictoryScreenProps) => {
-  const winner = Object.values(state.players).find((p) => !p.isEliminated)
-
+export const VictoryScreen = ({
+  winners,
+  prizePool,
+  onPlayAgain,
+}: VictoryScreenProps) => {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-12">
-      <div className="text-center space-y-8">
+    <div className="space-y-12 text-center">
+      {/* Victory Title */}
+      <div className="space-y-4">
         <Trophy className="w-24 h-24 text-accent mx-auto animate-retro-bounce" />
         <h1 className="text-6xl font-retro font-black text-primary animate-retro-glow">
-          GAME OVER
+          VICTORY!
         </h1>
-        {winner && (
-          <div className="font-pixel text-accent text-2xl animate-blink">
-            &gt; WINNER: {winner.name} &lt;
+      </div>
+
+      {/* Winners */}
+      <div className="retro-border bg-card/80 backdrop-blur-sm p-8 max-w-md mx-auto">
+        <div className="text-xl font-pixel text-primary mb-6">WINNERS</div>
+        <div className="space-y-4">
+          {winners.map((winner, index) => (
+            <div
+              key={winner}
+              className="font-pixel text-accent animate-blink"
+              style={{ animationDelay: `${index * 0.2}s` }}
+            >
+              {winner.slice(0, 6)}...{winner.slice(-4)}
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 text-2xl font-retro text-success animate-retro-glow">
+          {(prizePool / winners.length).toFixed(3)} ETH
+          <div className="text-sm font-pixel text-muted-foreground mt-2">
+            PER WINNER
           </div>
-        )}
-      </div>
-
-      <div className="space-y-4 text-center">
-        <div className="font-pixel text-muted-foreground">
-          FINAL_ROUND: {state.round}
-        </div>
-        <div className="font-pixel text-muted-foreground">
-          TOTAL_PLAYERS: {Object.keys(state.players).length}
         </div>
       </div>
 
+      {/* Play Again Button */}
       <button
         onClick={onPlayAgain}
-        className="retro-border font-pixel uppercase tracking-wider transition-all px-8 py-3
-          bg-accent/20 text-accent border-accent
-          hover:bg-accent hover:text-background
-          animate-retro-bounce"
+        className="retro-border font-pixel uppercase px-12 py-4 bg-primary/20 text-primary hover:bg-primary hover:text-background animate-retro-bounce"
       >
-        PLAY_AGAIN
+        PLAY AGAIN
       </button>
+
+      {/* Stats */}
+      <div className="font-pixel text-sm text-muted-foreground space-y-2">
+        <div>TOTAL PRIZE POOL: {prizePool.toFixed(3)} ETH</div>
+        <div>WINNERS: {winners.length}</div>
+      </div>
     </div>
   )
 }
