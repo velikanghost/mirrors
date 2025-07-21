@@ -1,122 +1,117 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
-/**
- * @title MirrorPit
- * @notice A multiplayer game where players compete for prizes. Game logic handled off-chain.
- */
-contract MirrorPit is ReentrancyGuard, AccessControl {
-    // Custom errors
-    error NotEnoughPlayers();
-    error AlreadyJoined();
-    error GameNotActive();
-    error InvalidAmount();
-    error TransferFailed();
-    error GameFull();
-    error InvalidGameId();
+contract MirrorPit is AccessControl, ReentrancyGuard {
+    using Address for address payable;
+
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+
+    struct Game {
+        bool exists;
+        bool active;
+        uint256 prizePool;
+        uint256 entryFee;
+        address creator;
+        uint256 minPlayers;
+        mapping(address => bool) hasJoined;
+        mapping(address => bool) isPlayerReady;
+        uint256 readyPlayersCount;
+    }
+
+    // Game state
+    mapping(uint256 => Game) public games;
+    uint256 public activeGamesCount;
+    uint256 public maxLobbies = 3;
 
     // Events
-    event LobbyCreated(uint256 indexed gameId, uint256 createdAt);
-    event GameStarted(uint256 indexed gameId, uint256 startTime);
-    event PlayerJoined(uint256 indexed gameId, address indexed player);
-    event GameEnded(
+    event LobbyCreated(
+        uint256 indexed gameId,
+        address indexed creator,
+        uint256 entryFee,
+        uint256 minPlayers
+    );
+    event PlayerJoined(
+        uint256 indexed gameId,
+        address indexed player,
+        uint256 amount
+    );
+    event PlayerReady(uint256 indexed gameId, address indexed player);
+    event PlayerUnready(uint256 indexed gameId, address indexed player);
+    event PrizesDistributed(
         uint256 indexed gameId,
         address[] winners,
         uint256 prizePerWinner
     );
+    event MaxLobbiesUpdated(uint256 newMaxLobbies);
 
-    // Game state
-    struct Game {
-        bool active;
-        bool exists;
-        uint256 startTime;
-        uint256 prizePool;
-        uint256 playerCount;
-        mapping(address => bool) players;
-    }
-
-    // Constants
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-    uint256 public constant MIN_PLAYERS = 2;
-    uint256 public constant MAX_PLAYERS = 8;
-    uint256 public constant ENTRY_FEE = 0.01 ether;
-
-    // State variables
-    uint256 private _nextGameId = 1;
-    mapping(uint256 => Game) public games;
+    // Errors
+    error GameNotActive();
+    error InvalidGameId();
+    error InvalidAmount();
+    error TransferFailed();
+    error MaxLobbiesReached();
+    error PlayerNotJoined();
+    error NotAllPlayersReady();
+    error InvalidMinPlayers();
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(OPERATOR_ROLE, msg.sender);
     }
 
-    function createLobby() external onlyRole(OPERATOR_ROLE) returns (uint256) {
-        uint256 newGameId = _nextGameId++;
+    function setMaxLobbies(
+        uint256 _maxLobbies
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        maxLobbies = _maxLobbies;
+        emit MaxLobbiesUpdated(_maxLobbies);
+    }
 
-        Game storage game = games[newGameId];
+    function createLobby(
+        uint256 entryFee,
+        uint256 minPlayers
+    ) external returns (uint256) {
+        if (activeGamesCount >= maxLobbies) revert MaxLobbiesReached();
+        if (minPlayers < 2) revert InvalidMinPlayers();
+
+        uint256 gameId = uint256(
+            keccak256(
+                abi.encodePacked(
+                    block.timestamp,
+                    block.prevrandao,
+                    activeGamesCount
+                )
+            )
+        );
+
+        Game storage game = games[gameId];
         game.exists = true;
         game.active = true;
+        game.prizePool = 0;
+        game.entryFee = entryFee;
+        game.creator = msg.sender;
+        game.minPlayers = minPlayers;
+        game.readyPlayersCount = 0;
 
-        emit LobbyCreated(newGameId, block.timestamp);
-        return newGameId;
+        activeGamesCount++;
+        emit LobbyCreated(gameId, msg.sender, entryFee, minPlayers);
+        return gameId;
     }
 
     function joinGame(uint256 gameId) external payable nonReentrant {
         Game storage game = games[gameId];
         if (!game.exists) revert InvalidGameId();
         if (!game.active) revert GameNotActive();
-        if (game.players[msg.sender]) revert AlreadyJoined();
-        if (msg.value != ENTRY_FEE) revert InvalidAmount();
-        if (game.playerCount >= MAX_PLAYERS) revert GameFull();
+        if (msg.value != game.entryFee) revert InvalidAmount();
+        if (game.hasJoined[msg.sender]) revert InvalidAmount();
 
-        game.players[msg.sender] = true;
-        game.playerCount++;
+        game.hasJoined[msg.sender] = true;
         game.prizePool += msg.value;
 
-        emit PlayerJoined(gameId, msg.sender);
-    }
-
-    function startGame(uint256 gameId) external onlyRole(OPERATOR_ROLE) {
-        Game storage game = games[gameId];
-        if (!game.exists) revert InvalidGameId();
-        if (!game.active) revert GameNotActive();
-        if (game.playerCount < MIN_PLAYERS) revert NotEnoughPlayers();
-
-        game.startTime = block.timestamp;
-        emit GameStarted(gameId, block.timestamp);
-    }
-
-    function endGameAndDistributePrizes(
-        uint256 gameId,
-        address[] calldata winners
-    ) external onlyRole(OPERATOR_ROLE) {
-        Game storage game = games[gameId];
-        if (!game.exists) revert InvalidGameId();
-        if (!game.active) revert GameNotActive();
-        if (winners.length == 0 || winners.length > game.playerCount)
-            revert NotEnoughPlayers();
-
-        uint256 prizePerWinner = game.prizePool / winners.length;
-        game.active = false;
-
-        for (uint256 i = 0; i < winners.length; i++) {
-            (bool success, ) = winners[i].call{value: prizePerWinner}("");
-            if (!success) revert TransferFailed();
-        }
-
-        emit GameEnded(gameId, winners, prizePerWinner);
-    }
-
-    // View functions
-    function isPlayerJoined(
-        uint256 gameId,
-        address player
-    ) external view returns (bool) {
-        if (!games[gameId].exists) revert InvalidGameId();
-        return games[gameId].players[player];
+        emit PlayerJoined(gameId, msg.sender, msg.value);
     }
 
     function getGameInfo(
@@ -127,45 +122,47 @@ contract MirrorPit is ReentrancyGuard, AccessControl {
         returns (
             bool exists,
             bool active,
-            uint256 startTime,
             uint256 prizePool,
-            uint256 playerCount
+            uint256 entryFee,
+            address creator,
+            uint256 minPlayers
         )
     {
         Game storage game = games[gameId];
         return (
             game.exists,
             game.active,
-            game.startTime,
             game.prizePool,
-            game.playerCount
+            game.entryFee,
+            game.creator,
+            game.minPlayers
         );
     }
 
-    function getActiveGames() external view returns (uint256[] memory) {
-        uint256 totalGames = _nextGameId - 1; // Calculate total games based on _nextGameId
-        uint256[] memory activeGames = new uint256[](totalGames);
-        uint256 count = 0;
-
-        for (uint256 i = 1; i < _nextGameId; i++) {
-            if (games[i].exists && games[i].active) {
-                activeGames[count] = i;
-                count++;
-            }
-        }
-
-        // Resize array to actual count
-        assembly {
-            mstore(activeGames, count)
-        }
-
-        return activeGames;
+    function hasPlayerJoined(
+        uint256 gameId,
+        address player
+    ) external view returns (bool) {
+        return games[gameId].hasJoined[player];
     }
 
-    // Required override
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view override(AccessControl) returns (bool) {
-        return super.supportsInterface(interfaceId);
+    function distributePrizes(
+        uint256 gameId,
+        address[] calldata winners
+    ) external onlyRole(OPERATOR_ROLE) nonReentrant {
+        Game storage game = games[gameId];
+        if (!game.exists) revert InvalidGameId();
+        if (!game.active) revert GameNotActive();
+        if (winners.length == 0) revert InvalidAmount();
+
+        uint256 prizePerWinner = game.prizePool / winners.length;
+        game.active = false;
+        activeGamesCount--;
+
+        for (uint256 i = 0; i < winners.length; i++) {
+            payable(winners[i]).sendValue(prizePerWinner);
+        }
+
+        emit PrizesDistributed(gameId, winners, prizePerWinner);
     }
 }

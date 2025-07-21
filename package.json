@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "preinstall": "npx only-allow pnpm",
+    "dev": "next dev --turbopack --port 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "dependencies": {
     "@bprogress/next": "^3.2.12",
@@ -15,12 +17,15 @@
     "@reduxjs/toolkit": "^2.8.2",
     "@tanstack/react-query": "^5.83.0",
     "@wagmi/core": "^2.17.3",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.6",
     "lucide-react": "^0.525.0",
     "next": "15.4.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-redux": "^9.2.0",
     "react-together": "^0.4.4",
+    "tailwind-merge": "^3.3.1",
     "viem": "~2.32.0",
     "wagmi": "^2.15.7"
   },

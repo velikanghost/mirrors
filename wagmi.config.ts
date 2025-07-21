@@ -2,12 +2,12 @@ import { defineConfig } from '@wagmi/cli'
 import { foundry, react } from '@wagmi/cli/plugins'
 
 export default defineConfig({
-  out: 'app/contracts-generated.ts',
+  out: 'app/generated.ts',
+  contracts: [],
   plugins: [
     foundry({
-      project: 'contracts',
-      artifacts: 'out',
-      include: ['Mirrors.json'],
+      project: './foundry',
+      include: ['MirrorPit.sol/**/*.json'],
     }),
     react(),
   ],

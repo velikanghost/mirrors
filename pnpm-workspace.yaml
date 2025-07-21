@@ -1,6 +1,9 @@
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
+  - bufferutil
   - esbuild
+  - keccak
   - node-datachannel
   - sharp
   - unrs-resolver
+  - utf-8-validate

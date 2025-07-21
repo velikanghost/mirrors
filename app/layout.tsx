@@ -50,6 +50,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${orbitron.variable} ${jetBrains.variable} antialiased`}
       >
+        {/* Background Effects */}
+        <div className="scanlines" />
+        <div className="grid-bg" />
         <Providers>
           <ReactTogetherWrapper>{children}</ReactTogetherWrapper>
         </Providers>

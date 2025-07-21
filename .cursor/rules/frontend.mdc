@@ -22,17 +22,11 @@ You are developing the frontend using Next.js 15.
 
 - Use React 19 features including the React Compiler
 - Prefer function components with hooks
-- Use RTK Query for server state management and API calls
 - Use react-redux for global client state
 - Use Suspense and Error Boundaries for better UX
 - Don't include functions in dependency arrays unless they're memoized with useCallback
 - Don't auto-trigger side effects that cause state changes in useEffect
 - Don't use useContext at all
-
-### API Integration
-
-- Use RTK Query for all API calls and server state management
-- Axios is still required as a dependency for RTK Query's underlying HTTP calls
 
 ### Authentication & Web3 Integration
 
@@ -55,7 +49,6 @@ You are developing the frontend using Next.js 15.
 
 ### State Management
 
-- Use RTK Query for API data fetching, caching, and server state
 - Use react-redux for global client state
 - Use local component state for UI-specific data
 - Implement optimistic updates where appropriate
@@ -66,7 +59,6 @@ You are developing the frontend using Next.js 15.
 - Use Next.js Image component for all images
 - Implement code splitting with dynamic imports
 - Use React.memo for expensive components
-- Implement proper caching strategies with RTK Query
 - Optimize bundle size with tree shaking
 
 ### Accessibility & UX
