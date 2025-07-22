@@ -4,13 +4,15 @@ import {
   useConnectedUsers,
   useMyId,
 } from 'react-together'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAccount, usePublicClient } from 'wagmi'
 import { parseEther, formatEther } from 'viem'
 import {
   useWriteMirrorPitCreateLobby,
   useWriteMirrorPitJoinGame,
-  useReadMirrorPitGetGameInfo,
+  useWriteMirrorPitDistributePrizes,
+  useReadMirrorPitHasPlayerJoined,
+  mirrorPitAbi,
 } from '../generated'
 import { web3config } from '../dapp.config'
 
@@ -22,6 +24,8 @@ interface Lobby {
   entryFee: bigint
   minPlayers: number
   creator: string
+  paidPlayers: string[] // Track addresses that have paid entry fee
+  winners?: string[] // Track winners when game ends
 }
 
 interface Message {
@@ -36,14 +40,16 @@ export default function LobbySystem() {
   const { writeContractAsync: createLobbyContract } =
     useWriteMirrorPitCreateLobby()
   const { writeContractAsync: joinGameContract } = useWriteMirrorPitJoinGame()
+  const { writeContractAsync: distributePrizesContract } =
+    useWriteMirrorPitDistributePrizes()
 
-  // Global lobbies state
+  // Global lobbies state managed by react-together
   const [lobbies, setLobbies] = useStateTogether<Lobby[]>('lobbies', [])
 
-  // Current user's active lobby
+  // Current user's active lobby - don't reset on disconnect anymore
   const [activeLobby, setActiveLobby] = useStateTogetherWithPerUserValues<
     string | null
-  >('active-lobby', null, { resetOnDisconnect: true })
+  >('active-lobby', null, { resetOnDisconnect: false })
 
   const myId = useMyId()
   const connectedUsers = useConnectedUsers()
@@ -54,6 +60,75 @@ export default function LobbySystem() {
   const [isCreating, setIsCreating] = useState(false)
   const [isJoining, setIsJoining] = useState(false)
 
+  // Track paid status for all lobbies
+  const [paidStatusMap, setPaidStatusMap] = useState<Record<string, boolean>>(
+    {},
+  )
+
+  // Check paid status for all lobbies
+  useEffect(() => {
+    if (!address) return
+
+    const checkAllLobbies = async () => {
+      const statusMap: Record<string, boolean> = {}
+      for (const lobby of lobbies) {
+        const paid = await hasUserPaid(lobby)
+        statusMap[lobby?.id ?? ''] = paid ?? false
+      }
+      setPaidStatusMap(statusMap)
+    }
+
+    checkAllLobbies()
+  }, [address, lobbies])
+
+  // Check if player has already paid from contract
+  const checkContractPayment = async (
+    gameId: string,
+    playerAddress: string,
+  ) => {
+    if (!isConnected || !address) return false
+
+    try {
+      const hasJoined = await publicClient?.readContract({
+        address: web3config.contractAddress as `0x${string}`,
+        abi: mirrorPitAbi,
+        functionName: 'hasPlayerJoined',
+        args: [BigInt(gameId), playerAddress as `0x${string}`],
+      })
+      return hasJoined
+    } catch (error) {
+      console.error('Failed to check payment status:', error)
+      return false
+    }
+  }
+
+  // Handle MultiSync reconnection
+  useEffect(() => {
+    const handleReconnection = async () => {
+      if (!address || !activeLobby) return
+
+      // Check if player has already paid for this lobby
+      const hasPaid = await checkContractPayment(activeLobby, address)
+
+      if (hasPaid) {
+        // If paid, update react-together state to reflect this
+        setLobbies((prev) =>
+          prev.map((lobby) =>
+            lobby.id === activeLobby
+              ? {
+                  ...lobby,
+                  players: [...new Set([...lobby.players, myId as string])],
+                  paidPlayers: [...new Set([...lobby.paidPlayers, address])],
+                }
+              : lobby,
+          ),
+        )
+      }
+    }
+
+    handleReconnection()
+  }, [myId, address, activeLobby])
+
   // Create a new lobby
   const createLobby = async () => {
     if (!isConnected || !address || !newLobbyName.trim() || !publicClient)
@@ -63,13 +138,13 @@ export default function LobbySystem() {
       setIsCreating(true)
       const entryFeeWei = parseEther(entryFee)
 
-      // Create lobby on-chain with raw numbers
+      // Create vault in contract
       const hash = await createLobbyContract({
         address: web3config.contractAddress as `0x${string}`,
         args: [entryFeeWei, BigInt(minPlayers)],
       })
 
-      // Wait for transaction and get game ID from event
+      // Wait for transaction and get game ID
       const receipt = await publicClient.waitForTransactionReceipt({ hash })
       const event = receipt?.logs[0]
       if (!event?.topics[1]) {
@@ -77,19 +152,19 @@ export default function LobbySystem() {
         return
       }
 
-      // Get the game ID from event
       const gameId = event.topics[1]
       console.log('Game ID:', gameId)
 
-      // Create local lobby state using game ID
+      // Create react-together lobby with contract gameId
       const newLobby: Lobby = {
-        id: gameId, // Use game ID for everything
+        id: gameId,
         name: newLobbyName.trim(),
         players: [],
         messages: [],
         entryFee: entryFeeWei,
         minPlayers,
         creator: address,
+        paidPlayers: [],
       }
 
       setLobbies((prev) => [...prev, newLobby])
@@ -110,21 +185,29 @@ export default function LobbySystem() {
 
     try {
       setIsJoining(true)
-      console.log('Joining game with ID:', gameId)
 
-      // Join game on-chain using the game ID
-      await joinGameContract({
-        address: web3config.contractAddress as `0x${string}`,
-        args: [BigInt(gameId)],
-        value: lobby.entryFee,
-      })
+      // First check if already paid
+      const hasPaid = await checkContractPayment(gameId, address)
 
-      // Update local state
+      // Only pay if haven't paid before
+      if (!hasPaid) {
+        await joinGameContract({
+          address: web3config.contractAddress as `0x${string}`,
+          args: [BigInt(gameId)],
+          value: lobby.entryFee,
+        })
+      }
+
+      // Join react-together lobby
       setActiveLobby(gameId)
       setLobbies((prev) =>
         prev.map((l) =>
           l.id === gameId
-            ? { ...l, players: [...new Set([...l.players, myId])] }
+            ? {
+                ...l,
+                players: [...new Set([...l.players, myId as string])],
+                paidPlayers: [...new Set([...l.paidPlayers, address])],
+              }
             : l,
         ),
       )
@@ -169,25 +252,40 @@ export default function LobbySystem() {
     setMessageText('')
   }
 
-  // Format entry fee with fallback
-  const formatEntryFee = (fee: bigint | undefined) => {
-    if (!fee) return '0'
+  // End game and distribute prizes
+  const endGame = async (gameId: string, winners: string[]) => {
+    if (!isConnected) return
+
     try {
-      return formatEther(fee)
+      // Update winners in react-together state
+      setLobbies((prev) =>
+        prev.map((lobby) =>
+          lobby.id === gameId ? { ...lobby, winners } : lobby,
+        ),
+      )
+
+      // Distribute prizes through contract
+      await distributePrizesContract({
+        address: web3config.contractAddress as `0x${string}`,
+        args: [BigInt(gameId), winners as `0x${string}`[]],
+      })
     } catch (error) {
-      console.error('Error formatting fee:', error)
-      return '0'
+      console.error('Failed to end game:', error)
     }
   }
 
   // Get current lobby data
   const currentLobby = lobbies.find((lobby) => lobby.id === activeLobby)
 
-  // Get shareable link for a lobby
-  const getShareableLink = (lobby: Lobby) => {
-    const url = new URL(window.location.href)
-    url.searchParams.set('room', lobby.id) // Use game ID for room parameter
-    return url.toString()
+  // Check if current user has paid entry fee for a lobby
+  const hasUserPaid = async (lobby: Lobby) => {
+    if (!address) return false
+
+    // First check react-together state
+    if (lobby.paidPlayers.includes(address)) return true
+
+    // If not in react-together state, check contract
+    return await checkContractPayment(lobby.id, address)
   }
 
   return (
@@ -255,21 +353,12 @@ export default function LobbySystem() {
             <div>
               <h2 className="text-2xl font-bold">{currentLobby.name}</h2>
               <p className="text-sm text-gray-400">
-                Entry Fee: {formatEntryFee(currentLobby.entryFee)} MON • Min
+                Entry Fee: {formatEther(currentLobby.entryFee)} MON • Min
                 Players: {currentLobby.minPlayers}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Game ID: {currentLobby.id}
               </p>
-              <button
-                onClick={() => {
-                  const link = getShareableLink(currentLobby)
-                  navigator.clipboard.writeText(link)
-                }}
-                className="text-xs text-blue-400 hover:text-blue-300 mt-1"
-              >
-                Copy Invite Link
-              </button>
             </div>
             <button
               onClick={leaveLobby}
@@ -285,13 +374,18 @@ export default function LobbySystem() {
             <div className="flex flex-wrap gap-2">
               {currentLobby.players.map((playerId) => {
                 const user = connectedUsers.find((u) => u.userId === playerId)
+                const hasPaid =
+                  address && currentLobby.paidPlayers.includes(address)
                 return (
                   <span
                     key={playerId}
-                    className="px-3 py-1 bg-white/10 rounded-full text-sm"
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      hasPaid ? 'bg-green-500/20' : 'bg-white/10'
+                    }`}
                   >
                     {user?.nickname || `Player ${playerId.slice(-4)}`}
                     {playerId === myId && ' (You)'}
+                    {hasPaid && ' ✓'}
                   </span>
                 )
               })}
@@ -359,30 +453,23 @@ export default function LobbySystem() {
                       <h3 className="font-bold">{lobby.name}</h3>
                       <p className="text-sm text-gray-400">
                         {lobby.players.length} / {lobby.minPlayers} players •
-                        Entry: {formatEntryFee(lobby.entryFee)} MON
+                        Entry: {formatEther(lobby.entryFee)} MON
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         Game ID: {lobby.id}
                       </p>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          const link = getShareableLink(lobby)
-                          navigator.clipboard.writeText(link)
-                        }}
-                        className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
-                      >
-                        Share
-                      </button>
-                      <button
-                        onClick={() => joinLobby(lobby.id)}
-                        disabled={!isConnected || isJoining}
-                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
-                      >
-                        {isJoining ? 'Joining...' : 'Join'}
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => joinLobby(lobby.id)}
+                      disabled={!isConnected || isJoining}
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
+                    >
+                      {isJoining
+                        ? 'Joining...'
+                        : paidStatusMap[lobby.id]
+                        ? 'Rejoin'
+                        : 'Join'}
+                    </button>
                   </div>
                 </div>
               ))}

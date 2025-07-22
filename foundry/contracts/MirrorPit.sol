@@ -146,6 +146,44 @@ contract MirrorPit is AccessControl, ReentrancyGuard {
         return games[gameId].hasJoined[player];
     }
 
+    function getActiveLobbies()
+        external
+        view
+        returns (
+            uint256[] memory gameIds,
+            bool[] memory exists,
+            uint256[] memory prizePools,
+            uint256[] memory entryFees,
+            address[] memory creators,
+            uint256[] memory minPlayers
+        )
+    {
+        // Initialize arrays with the size of active games
+        gameIds = new uint256[](activeGamesCount);
+        exists = new bool[](activeGamesCount);
+        prizePools = new uint256[](activeGamesCount);
+        entryFees = new uint256[](activeGamesCount);
+        creators = new address[](activeGamesCount);
+        minPlayers = new uint256[](activeGamesCount);
+
+        // Track current index for active games
+        uint256 currentIndex = 0;
+
+        // Iterate through all games and collect active ones
+        for (uint256 i = 0; currentIndex < activeGamesCount; i++) {
+            Game storage game = games[i];
+            if (game.exists && game.active) {
+                gameIds[currentIndex] = i;
+                exists[currentIndex] = true;
+                prizePools[currentIndex] = game.prizePool;
+                entryFees[currentIndex] = game.entryFee;
+                creators[currentIndex] = game.creator;
+                minPlayers[currentIndex] = game.minPlayers;
+                currentIndex++;
+            }
+        }
+    }
+
     function distributePrizes(
         uint256 gameId,
         address[] calldata winners

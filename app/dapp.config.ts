@@ -1,5 +1,5 @@
 export const web3config = {
-  contractAddress: '0x8752ffcbf8962CA2FEad155958A390f1B9594112',
+  contractAddress: '0xcC98697fB68eb30639F8119a4b2b93A9Bbd7b996',
   chainId: 10143,
   chainName: 'Monad Testnet',
   chainRpcUrl: process.env.NEXT_PUBLIC_RPC_URL,

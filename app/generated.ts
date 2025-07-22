@@ -69,6 +69,20 @@ export const mirrorPitAbi = [
   },
   {
     type: 'function',
+    inputs: [],
+    name: 'getActiveLobbies',
+    outputs: [
+      { name: 'gameIds', internalType: 'uint256[]', type: 'uint256[]' },
+      { name: 'exists', internalType: 'bool[]', type: 'bool[]' },
+      { name: 'prizePools', internalType: 'uint256[]', type: 'uint256[]' },
+      { name: 'entryFees', internalType: 'uint256[]', type: 'uint256[]' },
+      { name: 'creators', internalType: 'address[]', type: 'address[]' },
+      { name: 'minPlayers', internalType: 'uint256[]', type: 'uint256[]' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [{ name: 'gameId', internalType: 'uint256', type: 'uint256' }],
     name: 'getGameInfo',
     outputs: [
@@ -430,6 +444,15 @@ export const useReadMirrorPitGames = /*#__PURE__*/ createUseReadContract({
   abi: mirrorPitAbi,
   functionName: 'games',
 })
+
+/**
+ * Wraps __{@link useReadContract}__ with `abi` set to __{@link mirrorPitAbi}__ and `functionName` set to `"getActiveLobbies"`
+ */
+export const useReadMirrorPitGetActiveLobbies =
+  /*#__PURE__*/ createUseReadContract({
+    abi: mirrorPitAbi,
+    functionName: 'getActiveLobbies',
+  })
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mirrorPitAbi}__ and `functionName` set to `"getGameInfo"`
