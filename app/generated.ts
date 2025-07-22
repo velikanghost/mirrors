@@ -44,6 +44,13 @@ export const mirrorPitAbi = [
   },
   {
     type: 'function',
+    inputs: [{ name: 'gameId', internalType: 'uint256', type: 'uint256' }],
+    name: 'deleteLobby',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     inputs: [
       { name: 'gameId', internalType: 'uint256', type: 'uint256' },
       { name: 'winners', internalType: 'address[]', type: 'address[]' },
@@ -64,20 +71,6 @@ export const mirrorPitAbi = [
       { name: 'creator', internalType: 'address', type: 'address' },
       { name: 'minPlayers', internalType: 'uint256', type: 'uint256' },
       { name: 'readyPlayersCount', internalType: 'uint256', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getActiveLobbies',
-    outputs: [
-      { name: 'gameIds', internalType: 'uint256[]', type: 'uint256[]' },
-      { name: 'exists', internalType: 'bool[]', type: 'bool[]' },
-      { name: 'prizePools', internalType: 'uint256[]', type: 'uint256[]' },
-      { name: 'entryFees', internalType: 'uint256[]', type: 'uint256[]' },
-      { name: 'creators', internalType: 'address[]', type: 'address[]' },
-      { name: 'minPlayers', internalType: 'uint256[]', type: 'uint256[]' },
     ],
     stateMutability: 'view',
   },
@@ -210,6 +203,25 @@ export const mirrorPitAbi = [
       },
     ],
     name: 'LobbyCreated',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'gameId',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: true,
+      },
+      {
+        name: 'deleter',
+        internalType: 'address',
+        type: 'address',
+        indexed: true,
+      },
+    ],
+    name: 'LobbyDeleted',
   },
   {
     type: 'event',
@@ -382,6 +394,7 @@ export const mirrorPitAbi = [
     name: 'AccessControlUnauthorizedAccount',
   },
   { type: 'error', inputs: [], name: 'FailedCall' },
+  { type: 'error', inputs: [], name: 'GameHasPlayers' },
   { type: 'error', inputs: [], name: 'GameNotActive' },
   {
     type: 'error',
@@ -396,6 +409,7 @@ export const mirrorPitAbi = [
   { type: 'error', inputs: [], name: 'InvalidMinPlayers' },
   { type: 'error', inputs: [], name: 'MaxLobbiesReached' },
   { type: 'error', inputs: [], name: 'NotAllPlayersReady' },
+  { type: 'error', inputs: [], name: 'NotAuthorized' },
   { type: 'error', inputs: [], name: 'PlayerNotJoined' },
   { type: 'error', inputs: [], name: 'ReentrancyGuardReentrantCall' },
   { type: 'error', inputs: [], name: 'TransferFailed' },
@@ -444,15 +458,6 @@ export const useReadMirrorPitGames = /*#__PURE__*/ createUseReadContract({
   abi: mirrorPitAbi,
   functionName: 'games',
 })
-
-/**
- * Wraps __{@link useReadContract}__ with `abi` set to __{@link mirrorPitAbi}__ and `functionName` set to `"getActiveLobbies"`
- */
-export const useReadMirrorPitGetActiveLobbies =
-  /*#__PURE__*/ createUseReadContract({
-    abi: mirrorPitAbi,
-    functionName: 'getActiveLobbies',
-  })
 
 /**
  * Wraps __{@link useReadContract}__ with `abi` set to __{@link mirrorPitAbi}__ and `functionName` set to `"getGameInfo"`
@@ -520,6 +525,15 @@ export const useWriteMirrorPitCreateLobby =
   })
 
 /**
+ * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mirrorPitAbi}__ and `functionName` set to `"deleteLobby"`
+ */
+export const useWriteMirrorPitDeleteLobby =
+  /*#__PURE__*/ createUseWriteContract({
+    abi: mirrorPitAbi,
+    functionName: 'deleteLobby',
+  })
+
+/**
  * Wraps __{@link useWriteContract}__ with `abi` set to __{@link mirrorPitAbi}__ and `functionName` set to `"distributePrizes"`
  */
 export const useWriteMirrorPitDistributePrizes =
@@ -583,6 +597,15 @@ export const useSimulateMirrorPitCreateLobby =
   /*#__PURE__*/ createUseSimulateContract({
     abi: mirrorPitAbi,
     functionName: 'createLobby',
+  })
+
+/**
+ * Wraps __{@link useSimulateContract}__ with `abi` set to __{@link mirrorPitAbi}__ and `functionName` set to `"deleteLobby"`
+ */
+export const useSimulateMirrorPitDeleteLobby =
+  /*#__PURE__*/ createUseSimulateContract({
+    abi: mirrorPitAbi,
+    functionName: 'deleteLobby',
   })
 
 /**
@@ -653,6 +676,15 @@ export const useWatchMirrorPitLobbyCreatedEvent =
   /*#__PURE__*/ createUseWatchContractEvent({
     abi: mirrorPitAbi,
     eventName: 'LobbyCreated',
+  })
+
+/**
+ * Wraps __{@link useWatchContractEvent}__ with `abi` set to __{@link mirrorPitAbi}__ and `eventName` set to `"LobbyDeleted"`
+ */
+export const useWatchMirrorPitLobbyDeletedEvent =
+  /*#__PURE__*/ createUseWatchContractEvent({
+    abi: mirrorPitAbi,
+    eventName: 'LobbyDeleted',
   })
 
 /**

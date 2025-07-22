@@ -47,6 +47,7 @@ contract MirrorPit is AccessControl, ReentrancyGuard {
         uint256 prizePerWinner
     );
     event MaxLobbiesUpdated(uint256 newMaxLobbies);
+    event LobbyDeleted(uint256 indexed gameId, address indexed deleter);
 
     // Errors
     error GameNotActive();
@@ -57,6 +58,8 @@ contract MirrorPit is AccessControl, ReentrancyGuard {
     error PlayerNotJoined();
     error NotAllPlayersReady();
     error InvalidMinPlayers();
+    error NotAuthorized();
+    error GameHasPlayers();
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -146,44 +149,6 @@ contract MirrorPit is AccessControl, ReentrancyGuard {
         return games[gameId].hasJoined[player];
     }
 
-    function getActiveLobbies()
-        external
-        view
-        returns (
-            uint256[] memory gameIds,
-            bool[] memory exists,
-            uint256[] memory prizePools,
-            uint256[] memory entryFees,
-            address[] memory creators,
-            uint256[] memory minPlayers
-        )
-    {
-        // Initialize arrays with the size of active games
-        gameIds = new uint256[](activeGamesCount);
-        exists = new bool[](activeGamesCount);
-        prizePools = new uint256[](activeGamesCount);
-        entryFees = new uint256[](activeGamesCount);
-        creators = new address[](activeGamesCount);
-        minPlayers = new uint256[](activeGamesCount);
-
-        // Track current index for active games
-        uint256 currentIndex = 0;
-
-        // Iterate through all games and collect active ones
-        for (uint256 i = 0; currentIndex < activeGamesCount; i++) {
-            Game storage game = games[i];
-            if (game.exists && game.active) {
-                gameIds[currentIndex] = i;
-                exists[currentIndex] = true;
-                prizePools[currentIndex] = game.prizePool;
-                entryFees[currentIndex] = game.entryFee;
-                creators[currentIndex] = game.creator;
-                minPlayers[currentIndex] = game.minPlayers;
-                currentIndex++;
-            }
-        }
-    }
-
     function distributePrizes(
         uint256 gameId,
         address[] calldata winners
@@ -202,5 +167,29 @@ contract MirrorPit is AccessControl, ReentrancyGuard {
         }
 
         emit PrizesDistributed(gameId, winners, prizePerWinner);
+    }
+
+    function deleteLobby(uint256 gameId) external {
+        Game storage game = games[gameId];
+        if (!game.exists) revert InvalidGameId();
+        if (!game.active) revert GameNotActive();
+
+        // Only creator or admin can delete
+        if (
+            msg.sender != game.creator &&
+            !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)
+        ) {
+            revert NotAuthorized();
+        }
+
+        // Check if any players have joined and paid
+        if (game.prizePool > 0) {
+            revert GameHasPlayers();
+        }
+
+        game.active = false;
+        activeGamesCount--;
+
+        emit LobbyDeleted(gameId, msg.sender);
     }
 }

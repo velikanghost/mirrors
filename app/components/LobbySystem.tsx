@@ -11,27 +11,106 @@ import {
   useWriteMirrorPitCreateLobby,
   useWriteMirrorPitJoinGame,
   useWriteMirrorPitDistributePrizes,
+  useWriteMirrorPitDeleteLobby,
   useReadMirrorPitHasPlayerJoined,
   mirrorPitAbi,
 } from '../generated'
 import { web3config } from '../dapp.config'
+import { GameArena } from './GameArena'
 
-interface Lobby {
-  id: string // Contract's game ID used for everything
+// Lightweight lobby summary
+interface LobbySummary {
+  id: string
   name: string
-  players: string[]
-  messages: Message[]
-  entryFee: bigint
+  entryFeeWei: string // stringify BigInt
   minPlayers: number
   creator: string
-  paidPlayers: string[] // Track addresses that have paid entry fee
-  winners?: string[] // Track winners when game ends
+}
+
+// Per-lobby player state
+interface LobbyPlayers {
+  players: string[]
+  paidPlayers: string[]
 }
 
 interface Message {
   userId: string
   text: string
   timestamp: number
+}
+
+// Helper function for safe player ID display
+const formatPlayerId = (id: string | null | undefined): string => {
+  if (!id) return 'Unknown'
+  return `Player ${id.slice(-4)}`
+}
+
+// Lobby Item Component
+const LobbyItem = ({
+  lobby,
+  isConnected,
+  isJoining,
+  paidStatusMap,
+  onJoin,
+  onDelete,
+  canDelete,
+}: {
+  lobby: LobbySummary
+  isConnected: boolean
+  isJoining: boolean
+  paidStatusMap: Record<string, boolean>
+  onJoin: (id: string) => void
+  onDelete: (id: string) => void
+  canDelete: boolean
+}) => {
+  const [lobbyPlayers] = useStateTogether<LobbyPlayers>(
+    `lobby-${lobby.id}-players`,
+    { players: [], paidPlayers: [] },
+  )
+
+  // Format entry fee with fallback
+  const formattedEntryFee = lobby?.entryFeeWei
+    ? formatEther(BigInt(lobby.entryFeeWei))
+    : '0'
+
+  // Ensure players array exists
+  const playerCount = lobbyPlayers?.players?.length || 0
+
+  return (
+    <div key={lobby.id} className="p-4 bg-white/5 rounded-lg backdrop-blur-sm">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="font-bold">{lobby.name}</h3>
+          <p className="text-sm text-gray-400">
+            {playerCount} / {lobby.minPlayers} players • Entry:{' '}
+            {formattedEntryFee} MON
+          </p>
+          <p className="text-xs text-gray-500 mt-1">Game ID: {lobby.id}</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => onJoin(lobby.id)}
+            disabled={!isConnected || isJoining}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
+          >
+            {isJoining
+              ? 'Joining...'
+              : paidStatusMap[lobby.id]
+              ? 'Rejoin'
+              : 'Join'}
+          </button>
+          {canDelete && (
+            <button
+              onClick={() => onDelete(lobby.id)}
+              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function LobbySystem() {
@@ -42,14 +121,27 @@ export default function LobbySystem() {
   const { writeContractAsync: joinGameContract } = useWriteMirrorPitJoinGame()
   const { writeContractAsync: distributePrizesContract } =
     useWriteMirrorPitDistributePrizes()
+  const { writeContractAsync: deleteLobbyContract } =
+    useWriteMirrorPitDeleteLobby()
 
-  // Global lobbies state managed by react-together
-  const [lobbies, setLobbies] = useStateTogether<Lobby[]>('lobbies', [])
+  // Global lobbies state - lightweight summaries only
+  const [lobbies, setLobbies] = useStateTogether<LobbySummary[]>('lobbies', [])
 
   // Current user's active lobby - don't reset on disconnect anymore
   const [activeLobby, setActiveLobby] = useStateTogetherWithPerUserValues<
     string | null
   >('active-lobby', null, { resetOnDisconnect: false })
+
+  // Per-lobby state when active
+  const [lobbyPlayers, setLobbyPlayers] = useStateTogether<LobbyPlayers>(
+    activeLobby ? `lobby-${activeLobby}-players` : '',
+    { players: [], paidPlayers: [] },
+  )
+
+  const [lobbyMessages, setLobbyMessages] = useStateTogether<Message[]>(
+    activeLobby ? `lobby-${activeLobby}-chat` : '',
+    [],
+  )
 
   const myId = useMyId()
   const connectedUsers = useConnectedUsers()
@@ -67,13 +159,13 @@ export default function LobbySystem() {
 
   // Check paid status for all lobbies
   useEffect(() => {
-    if (!address) return
+    if (!address || !lobbies) return
 
     const checkAllLobbies = async () => {
       const statusMap: Record<string, boolean> = {}
       for (const lobby of lobbies) {
-        const paid = await hasUserPaid(lobby)
-        statusMap[lobby?.id ?? ''] = paid ?? false
+        const paid = await hasUserPaid(lobby.id)
+        statusMap[lobby.id] = paid
       }
       setPaidStatusMap(statusMap)
     }
@@ -85,7 +177,7 @@ export default function LobbySystem() {
   const checkContractPayment = async (
     gameId: string,
     playerAddress: string,
-  ) => {
+  ): Promise<boolean> => {
     if (!isConnected || !address) return false
 
     try {
@@ -95,7 +187,7 @@ export default function LobbySystem() {
         functionName: 'hasPlayerJoined',
         args: [BigInt(gameId), playerAddress as `0x${string}`],
       })
-      return hasJoined
+      return hasJoined ?? false
     } catch (error) {
       console.error('Failed to check payment status:', error)
       return false
@@ -112,17 +204,10 @@ export default function LobbySystem() {
 
       if (hasPaid) {
         // If paid, update react-together state to reflect this
-        setLobbies((prev) =>
-          prev.map((lobby) =>
-            lobby.id === activeLobby
-              ? {
-                  ...lobby,
-                  players: [...new Set([...lobby.players, myId as string])],
-                  paidPlayers: [...new Set([...lobby.paidPlayers, address])],
-                }
-              : lobby,
-          ),
-        )
+        setLobbyPlayers((prev) => ({
+          players: [...new Set([...prev.players, myId as string])],
+          paidPlayers: [...new Set([...prev.paidPlayers, address])],
+        }))
       }
     }
 
@@ -155,16 +240,13 @@ export default function LobbySystem() {
       const gameId = event.topics[1]
       console.log('Game ID:', gameId)
 
-      // Create react-together lobby with contract gameId
-      const newLobby: Lobby = {
+      // Create lightweight lobby summary
+      const newLobby: LobbySummary = {
         id: gameId,
         name: newLobbyName.trim(),
-        players: [],
-        messages: [],
-        entryFee: entryFeeWei,
+        entryFeeWei: entryFeeWei.toString(), // stringify BigInt
         minPlayers,
         creator: address,
-        paidPlayers: [],
       }
 
       setLobbies((prev) => [...prev, newLobby])
@@ -194,23 +276,18 @@ export default function LobbySystem() {
         await joinGameContract({
           address: web3config.contractAddress as `0x${string}`,
           args: [BigInt(gameId)],
-          value: lobby.entryFee,
+          value: BigInt(lobby.entryFeeWei),
         })
       }
 
       // Join react-together lobby
       setActiveLobby(gameId)
-      setLobbies((prev) =>
-        prev.map((l) =>
-          l.id === gameId
-            ? {
-                ...l,
-                players: [...new Set([...l.players, myId as string])],
-                paidPlayers: [...new Set([...l.paidPlayers, address])],
-              }
-            : l,
-        ),
-      )
+
+      // Update lobby players - ensure arrays exist with fallbacks
+      setLobbyPlayers((prev) => ({
+        players: [...new Set([...(prev?.players || []), myId])],
+        paidPlayers: [...new Set([...(prev?.paidPlayers || []), address])],
+      }))
     } catch (error) {
       console.error('Failed to join lobby:', error)
     } finally {
@@ -222,13 +299,10 @@ export default function LobbySystem() {
   const leaveLobby = () => {
     if (!activeLobby || !myId) return
 
-    setLobbies((prev) =>
-      prev.map((lobby) =>
-        lobby.id === activeLobby
-          ? { ...lobby, players: lobby.players.filter((id) => id !== myId) }
-          : lobby,
-      ),
-    )
+    setLobbyPlayers((prev) => ({
+      ...prev,
+      players: prev.players.filter((id) => id !== myId),
+    }))
     setActiveLobby(null)
   }
 
@@ -242,13 +316,7 @@ export default function LobbySystem() {
       timestamp: Date.now(),
     }
 
-    setLobbies((prev) =>
-      prev.map((lobby) =>
-        lobby.id === activeLobby
-          ? { ...lobby, messages: [...lobby.messages, message] }
-          : lobby,
-      ),
-    )
+    setLobbyMessages((prev) => [...prev, message])
     setMessageText('')
   }
 
@@ -257,13 +325,6 @@ export default function LobbySystem() {
     if (!isConnected) return
 
     try {
-      // Update winners in react-together state
-      setLobbies((prev) =>
-        prev.map((lobby) =>
-          lobby.id === gameId ? { ...lobby, winners } : lobby,
-        ),
-      )
-
       // Distribute prizes through contract
       await distributePrizesContract({
         address: web3config.contractAddress as `0x${string}`,
@@ -275,17 +336,35 @@ export default function LobbySystem() {
   }
 
   // Get current lobby data
-  const currentLobby = lobbies.find((lobby) => lobby.id === activeLobby)
+  const currentLobby = lobbies?.find((lobby) => lobby.id === activeLobby)
 
   // Check if current user has paid entry fee for a lobby
-  const hasUserPaid = async (lobby: Lobby) => {
-    if (!address) return false
+  const hasUserPaid = async (lobbyId: string) => {
+    if (!address || !lobbies) return false
 
     // First check react-together state
-    if (lobby.paidPlayers.includes(address)) return true
+    const lobby = lobbies.find((l) => l.id === lobbyId)
+    if (!lobby) return false
 
     // If not in react-together state, check contract
-    return await checkContractPayment(lobby.id, address)
+    return await checkContractPayment(lobbyId, address)
+  }
+
+  // Delete a lobby
+  const deleteLobby = async (gameId: string) => {
+    if (!isConnected || !address) return
+
+    try {
+      await deleteLobbyContract({
+        address: web3config.contractAddress as `0x${string}`,
+        args: [BigInt(gameId)],
+      })
+
+      // Remove from react-together state
+      setLobbies((prev) => prev.filter((lobby) => lobby.id !== gameId))
+    } catch (error) {
+      console.error('Failed to delete lobby:', error)
+    }
   }
 
   return (
@@ -312,7 +391,12 @@ export default function LobbySystem() {
               <input
                 type="number"
                 value={entryFee}
-                onChange={(e) => setEntryFee(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (value === '' || parseFloat(value) >= 0) {
+                    setEntryFee(value)
+                  }
+                }}
                 min="0"
                 step="0.01"
                 className="w-full px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
@@ -325,7 +409,12 @@ export default function LobbySystem() {
               <input
                 type="number"
                 value={minPlayers}
-                onChange={(e) => setMinPlayers(parseInt(e.target.value))}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value)
+                  if (!isNaN(value) && value >= 2) {
+                    setMinPlayers(value)
+                  }
+                }}
                 min="2"
                 className="w-full px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
               />
@@ -347,14 +436,14 @@ export default function LobbySystem() {
       </div>
 
       {/* Active Lobby Chat or Lobby List */}
-      {currentLobby ? (
+      {currentLobby && lobbyPlayers ? (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold">{currentLobby.name}</h2>
               <p className="text-sm text-gray-400">
-                Entry Fee: {formatEther(currentLobby.entryFee)} MON • Min
-                Players: {currentLobby.minPlayers}
+                Entry Fee: {formatEther(BigInt(currentLobby.entryFeeWei))} MON •
+                Min Players: {currentLobby.minPlayers}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Game ID: {currentLobby.id}
@@ -372,10 +461,10 @@ export default function LobbySystem() {
           <div className="p-4 bg-white/5 rounded-lg backdrop-blur-sm">
             <h3 className="font-bold mb-2">Players:</h3>
             <div className="flex flex-wrap gap-2">
-              {currentLobby.players.map((playerId) => {
-                const user = connectedUsers.find((u) => u.userId === playerId)
+              {(lobbyPlayers?.players || []).map((playerId) => {
+                const user = connectedUsers?.find((u) => u.userId === playerId)
                 const hasPaid =
-                  address && currentLobby.paidPlayers.includes(address)
+                  address && (lobbyPlayers?.paidPlayers || []).includes(address)
                 return (
                   <span
                     key={playerId}
@@ -383,7 +472,7 @@ export default function LobbySystem() {
                       hasPaid ? 'bg-green-500/20' : 'bg-white/10'
                     }`}
                   >
-                    {user?.nickname || `Player ${playerId.slice(-4)}`}
+                    {user?.nickname || formatPlayerId(playerId)}
                     {playerId === myId && ' (You)'}
                     {hasPaid && ' ✓'}
                   </span>
@@ -392,86 +481,81 @@ export default function LobbySystem() {
             </div>
           </div>
 
-          {/* Chat Messages */}
-          <div className="h-96 p-4 bg-white/5 rounded-lg backdrop-blur-sm space-y-4 overflow-y-auto">
-            {currentLobby.messages.map((msg, idx) => {
-              const user = connectedUsers.find((u) => u.userId === msg.userId)
-              return (
-                <div
-                  key={idx}
-                  className={`p-3 rounded-lg ${
-                    msg.userId === myId
-                      ? 'bg-blue-500/20 ml-auto'
-                      : 'bg-white/10'
-                  } max-w-[80%]`}
-                >
-                  <div className="text-sm font-bold mb-1">
-                    {user?.nickname || `Player ${msg.userId.slice(-4)}`}
-                    {msg.userId === myId && ' (You)'}
-                  </div>
-                  <div>{msg.text}</div>
-                </div>
-              )
-            })}
-          </div>
+          <div className="flex justify-between">
+            <div className="arena w-3/4">
+              <GameArena
+                lobbyId={currentLobby.id}
+                minPlayers={currentLobby.minPlayers}
+              />
+            </div>
+            <div className="chat w-1/4">
+              {/* Chat Messages */}
+              <div className="h-96 p-4 bg-white/5 rounded-lg backdrop-blur-sm space-y-4 overflow-y-auto">
+                {Array.isArray(lobbyMessages) &&
+                  lobbyMessages.map((msg, idx) => {
+                    const user = connectedUsers?.find(
+                      (u) => u.userId === msg.userId,
+                    )
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-3 rounded-lg ${
+                          msg.userId === myId
+                            ? 'bg-blue-500/20 ml-auto'
+                            : 'bg-white/10'
+                        } max-w-[80%]`}
+                      >
+                        <div className="text-sm font-bold mb-1">
+                          {user?.nickname || formatPlayerId(msg.userId)}
+                          {msg.userId === myId && ' (You)'}
+                        </div>
+                        <div>{msg.text}</div>
+                      </div>
+                    )
+                  })}
+              </div>
 
-          {/* Message Input */}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-              placeholder="Type a message..."
-              className="flex-1 px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!messageText.trim()}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
-            >
-              Send
-            </button>
+              {/* Message Input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                  placeholder="Type a message..."
+                  className="flex-1 px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={!messageText.trim()}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
+                >
+                  Send
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
           <h2 className="text-2xl font-bold">Available Lobbies</h2>
-          {lobbies.length === 0 ? (
+          {!lobbies || lobbies.length === 0 ? (
             <div className="text-center p-8 bg-white/5 rounded-lg backdrop-blur-sm">
               <p className="text-gray-400">No lobbies available. Create one!</p>
             </div>
           ) : (
             <div className="grid gap-4">
-              {lobbies.map((lobby) => (
-                <div
+              {(lobbies || []).map((lobby) => (
+                <LobbyItem
                   key={lobby.id}
-                  className="p-4 bg-white/5 rounded-lg backdrop-blur-sm"
-                >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h3 className="font-bold">{lobby.name}</h3>
-                      <p className="text-sm text-gray-400">
-                        {lobby.players.length} / {lobby.minPlayers} players •
-                        Entry: {formatEther(lobby.entryFee)} MON
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Game ID: {lobby.id}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => joinLobby(lobby.id)}
-                      disabled={!isConnected || isJoining}
-                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
-                    >
-                      {isJoining
-                        ? 'Joining...'
-                        : paidStatusMap[lobby.id]
-                        ? 'Rejoin'
-                        : 'Join'}
-                    </button>
-                  </div>
-                </div>
+                  lobby={lobby}
+                  isConnected={isConnected}
+                  isJoining={isJoining}
+                  paidStatusMap={paidStatusMap}
+                  onJoin={joinLobby}
+                  onDelete={deleteLobby}
+                  canDelete={address === lobby.creator}
+                />
               ))}
             </div>
           )}
