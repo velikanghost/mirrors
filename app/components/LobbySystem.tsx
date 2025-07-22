@@ -5,7 +5,7 @@ import {
   useMyId,
 } from 'react-together'
 import { useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, usePublicClient } from 'wagmi'
 import { parseEther, formatEther } from 'viem'
 import {
   useWriteMirrorPitCreateLobby,
@@ -15,7 +15,7 @@ import {
 import { web3config } from '../dapp.config'
 
 interface Lobby {
-  id: string
+  id: string // Contract's game ID used for everything
   name: string
   players: string[]
   messages: Message[]
@@ -32,6 +32,7 @@ interface Message {
 
 export default function LobbySystem() {
   const { address, isConnected } = useAccount()
+  const publicClient = usePublicClient()
   const { writeContractAsync: createLobbyContract } =
     useWriteMirrorPitCreateLobby()
   const { writeContractAsync: joinGameContract } = useWriteMirrorPitJoinGame()
@@ -55,21 +56,34 @@ export default function LobbySystem() {
 
   // Create a new lobby
   const createLobby = async () => {
-    if (!isConnected || !address || !newLobbyName.trim()) return
+    if (!isConnected || !address || !newLobbyName.trim() || !publicClient)
+      return
 
     try {
       setIsCreating(true)
       const entryFeeWei = parseEther(entryFee)
 
-      // Create lobby on-chain
-      const tx = await createLobbyContract({
+      // Create lobby on-chain with raw numbers
+      const hash = await createLobbyContract({
         address: web3config.contractAddress as `0x${string}`,
         args: [entryFeeWei, BigInt(minPlayers)],
       })
 
-      // Create local lobby state
+      // Wait for transaction and get game ID from event
+      const receipt = await publicClient.waitForTransactionReceipt({ hash })
+      const event = receipt?.logs[0]
+      if (!event?.topics[1]) {
+        console.error('No game ID in event')
+        return
+      }
+
+      // Get the game ID from event
+      const gameId = event.topics[1]
+      console.log('Game ID:', gameId)
+
+      // Create local lobby state using game ID
       const newLobby: Lobby = {
-        id: `lobby-${Date.now()}`,
+        id: gameId, // Use game ID for everything
         name: newLobbyName.trim(),
         players: [],
         messages: [],
@@ -88,29 +102,30 @@ export default function LobbySystem() {
   }
 
   // Join a lobby
-  const joinLobby = async (lobbyId: string) => {
+  const joinLobby = async (gameId: string) => {
     if (!isConnected || !address || !myId) return
 
-    const lobby = lobbies.find((l) => l.id === lobbyId)
+    const lobby = lobbies.find((l) => l.id === gameId)
     if (!lobby) return
 
     try {
       setIsJoining(true)
+      console.log('Joining game with ID:', gameId)
 
-      // Join game on-chain
+      // Join game on-chain using the game ID
       await joinGameContract({
         address: web3config.contractAddress as `0x${string}`,
-        args: [BigInt(lobbyId)],
+        args: [BigInt(gameId)],
         value: lobby.entryFee,
       })
 
       // Update local state
-      setActiveLobby(lobbyId)
+      setActiveLobby(gameId)
       setLobbies((prev) =>
-        prev.map((lobby) =>
-          lobby.id === lobbyId
-            ? { ...lobby, players: [...new Set([...lobby.players, myId])] }
-            : lobby,
+        prev.map((l) =>
+          l.id === gameId
+            ? { ...l, players: [...new Set([...l.players, myId])] }
+            : l,
         ),
       )
     } catch (error) {
@@ -167,6 +182,13 @@ export default function LobbySystem() {
 
   // Get current lobby data
   const currentLobby = lobbies.find((lobby) => lobby.id === activeLobby)
+
+  // Get shareable link for a lobby
+  const getShareableLink = (lobby: Lobby) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('room', lobby.id) // Use game ID for room parameter
+    return url.toString()
+  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -236,6 +258,18 @@ export default function LobbySystem() {
                 Entry Fee: {formatEntryFee(currentLobby.entryFee)} MON • Min
                 Players: {currentLobby.minPlayers}
               </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Game ID: {currentLobby.id}
+              </p>
+              <button
+                onClick={() => {
+                  const link = getShareableLink(currentLobby)
+                  navigator.clipboard.writeText(link)
+                }}
+                className="text-xs text-blue-400 hover:text-blue-300 mt-1"
+              >
+                Copy Invite Link
+              </button>
             </div>
             <button
               onClick={leaveLobby}
@@ -327,14 +361,28 @@ export default function LobbySystem() {
                         {lobby.players.length} / {lobby.minPlayers} players •
                         Entry: {formatEntryFee(lobby.entryFee)} MON
                       </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Game ID: {lobby.id}
+                      </p>
                     </div>
-                    <button
-                      onClick={() => joinLobby(lobby.id)}
-                      disabled={!isConnected || isJoining}
-                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
-                    >
-                      {isJoining ? 'Joining...' : 'Join'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          const link = getShareableLink(lobby)
+                          navigator.clipboard.writeText(link)
+                        }}
+                        className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
+                      >
+                        Share
+                      </button>
+                      <button
+                        onClick={() => joinLobby(lobby.id)}
+                        disabled={!isConnected || isJoining}
+                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
+                      >
+                        {isJoining ? 'Joining...' : 'Join'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
