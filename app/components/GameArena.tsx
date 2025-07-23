@@ -48,6 +48,13 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
   // Local state for current player's action selection
   const [selectedActions, setSelectedActions] = useState<GameAction[]>([])
 
+  // Reset selectedActions when transitioning to a new round
+  useEffect(() => {
+    if (gameState.phase === GAME_PHASES.INPUT) {
+      setSelectedActions([])
+    }
+  }, [gameState.round, gameState.phase])
+
   // Handle ready toggle
   const handleReady = () => {
     if (!myId) return
