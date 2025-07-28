@@ -1,4 +1,4 @@
-export const ROUND_DURATION = 30
+export const ROUND_DURATION = 40
 export const REVEAL_DURATION = 5
 
 export const GAME_ACTIONS = ['left', 'right', 'jump', 'spin', 'duck'] as const

@@ -22,18 +22,36 @@ interface GameState {
   readyPlayers: string[] // Track players who are ready
 }
 
+// Per-lobby player state
+interface LobbyPlayers {
+  players: string[]
+  paidPlayers: string[]
+}
+
 interface GameArenaProps {
   lobbyId: string
   minPlayers: number
+}
+
+// Helper function for safe player ID display
+const formatPlayerId = (id: string | null | undefined): string => {
+  if (!id) return 'Unknown'
+  return `Player ${id.slice(-4)}`
 }
 
 export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
   const myId = useMyId()
   const connectedUsers = useConnectedUsers()
 
+  // Get lobby players state
+  const [lobbyPlayers] = useStateTogether<LobbyPlayers>(
+    `lobby-${lobbyId}-players`,
+    { players: [], paidPlayers: [] },
+  )
+
   // Shared game state using react-together, scoped to lobby ID
   const [gameState, setGameState] = useStateTogether<GameState>(
-    `game-${lobbyId}-state`, // Changed from game-state-${lobbyId} to game-${lobbyId}-state for consistency
+    `game-${lobbyId}-state`,
     {
       round: 1,
       phase: GAME_PHASES.READY_CHECK,
@@ -71,9 +89,10 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
   useEffect(() => {
     if (gameState.phase !== GAME_PHASES.READY_CHECK) return
 
-    const activePlayers = connectedUsers
-      .map((u) => u.userId)
-      .filter((id) => !gameState.eliminated.includes(id))
+    // Use lobby players instead of all connected users
+    const activePlayers = (lobbyPlayers?.players || []).filter(
+      (id) => !gameState.eliminated.includes(id),
+    )
 
     const allReady =
       activePlayers.length >= minPlayers &&
@@ -86,7 +105,7 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
         timeRemaining: ROUND_DURATION,
       }))
     }
-  }, [gameState.readyPlayers, connectedUsers, minPlayers])
+  }, [gameState.readyPlayers, lobbyPlayers, minPlayers])
 
   // Handle action selection
   const handleActionSelect = (action: GameAction) => {
@@ -118,9 +137,9 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
   useEffect(() => {
     if (gameState.phase !== GAME_PHASES.INPUT) return
 
-    const activePlayers = connectedUsers
-      .map((u) => u.userId)
-      .filter((id) => !gameState.eliminated.includes(id))
+    const activePlayers = (lobbyPlayers?.players || []).filter(
+      (id) => !gameState.eliminated.includes(id),
+    )
 
     const allSubmitted = activePlayers.every((id) => gameState.submissions[id])
 
@@ -144,16 +163,16 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
         timeRemaining: REVEAL_DURATION,
       }))
     }
-  }, [gameState.submissions, connectedUsers])
+  }, [gameState.submissions, lobbyPlayers])
 
   // Handle round timer
   useEffect(() => {
     if (gameState.timeRemaining <= 0) {
       if (gameState.phase === GAME_PHASES.INPUT) {
         // Get active players who haven't submitted
-        const activePlayers = connectedUsers
-          .map((u) => u.userId)
-          .filter((id) => !gameState.eliminated.includes(id))
+        const activePlayers = (lobbyPlayers?.players || []).filter(
+          (id) => !gameState.eliminated.includes(id),
+        )
 
         const notSubmittedPlayers = activePlayers.filter(
           (id) => !gameState.submissions[id],
@@ -168,9 +187,9 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
         }))
       } else if (gameState.phase === GAME_PHASES.REVEAL) {
         // Start next round or end game
-        const activePlayers = connectedUsers
-          .map((u) => u.userId)
-          .filter((id) => !gameState.eliminated.includes(id))
+        const activePlayers = (lobbyPlayers?.players || []).filter(
+          (id) => !gameState.eliminated.includes(id),
+        )
 
         if (activePlayers.length <= 1) {
           // Game over - we have winner(s)
@@ -206,7 +225,10 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
 
       return () => clearInterval(timer)
     }
-  }, [gameState.timeRemaining, gameState.phase])
+  }, [gameState.timeRemaining, gameState.phase, lobbyPlayers])
+
+  // Helper function to check if current player has submitted
+  const hasSubmitted = myId && gameState.submissions[myId]
 
   return (
     <div className="terminal-section">
@@ -234,27 +256,29 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
           <div className="text-center">
             <p className="text-lg mb-4">
               Waiting for players... ({gameState.readyPlayers.length} /{' '}
-              {minPlayers} ready)
+              {Math.max(minPlayers, lobbyPlayers?.players?.length || 0)} ready)
             </p>
             {/* Players List */}
             <div className="grid grid-cols-2 gap-4 mb-6">
-              {connectedUsers.map((user) => {
-                const isReady = gameState.readyPlayers.includes(user.userId)
+              {/* Only show players who have joined the lobby */}
+              {(lobbyPlayers?.players || []).map((playerId) => {
+                const user = connectedUsers?.find((u) => u.userId === playerId)
+                const isReady = gameState.readyPlayers.includes(playerId)
                 return (
                   <div
-                    key={user.userId}
+                    key={playerId}
                     className={`p-4 rounded ${
                       isReady ? 'bg-green-500/20' : 'bg-white/10'
                     }`}
                   >
-                    <span>{user.nickname || user.userId}</span>
+                    <span>{user?.nickname || formatPlayerId(playerId)}</span>
                     <span className="ml-2">{isReady ? '✓' : '...'}</span>
                   </div>
                 )
               })}
             </div>
-            {/* Ready Button */}
-            {myId && (
+            {/* Ready Button - only show if player has joined */}
+            {myId && lobbyPlayers?.players?.includes(myId) && (
               <Button
                 onClick={handleReady}
                 variant={
@@ -279,12 +303,14 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
               <button
                 key={action}
                 onClick={() => handleActionSelect(action)}
-                disabled={selectedActions.length >= COMBO_LENGTH}
+                disabled={Boolean(
+                  selectedActions.length >= COMBO_LENGTH || hasSubmitted,
+                )}
                 className={`action-button ${
                   selectedActions.includes(action)
                     ? 'selected animate-retro-bounce'
                     : ''
-                }`}
+                } ${hasSubmitted ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {action}
               </button>
@@ -300,31 +326,63 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
                   key={i}
                   className={`pattern-slot ${
                     selectedActions[i] ? 'filled animate-pixel-jump' : ''
-                  }`}
+                  } ${hasSubmitted ? 'opacity-50' : ''}`}
                 >
                   {selectedActions[i] || '?'}
                 </div>
               ))}
           </div>
 
-          {/* Control Buttons */}
-          <div className="flex justify-center gap-4">
-            <Button
-              onClick={handleReset}
-              variant="destructive"
-              disabled={selectedActions.length === 0}
-              isAnimated
-            >
-              Reset
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              variant="success"
-              disabled={selectedActions.length !== COMBO_LENGTH}
-              isAnimated
-            >
-              Submit
-            </Button>
+          {/* Control Buttons and Status */}
+          <div className="space-y-4">
+            <div className="flex justify-center gap-4">
+              <Button
+                onClick={handleReset}
+                variant="destructive"
+                disabled={Boolean(selectedActions.length === 0 || hasSubmitted)}
+                isAnimated
+              >
+                Reset
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                variant="success"
+                disabled={Boolean(
+                  selectedActions.length !== COMBO_LENGTH || hasSubmitted,
+                )}
+                isAnimated
+              >
+                Submit
+              </Button>
+            </div>
+
+            {hasSubmitted && (
+              <div className="text-center animate-fade-in">
+                <p className="text-lg text-green-400">Moves submitted!</p>
+                <p className="text-sm text-gray-400">
+                  Waiting for other players...
+                </p>
+                <div className="mt-2 flex justify-center gap-2">
+                  {(lobbyPlayers?.players || [])
+                    .filter((id) => !gameState.eliminated.includes(id))
+                    .map((playerId) => {
+                      const hasPlayerSubmitted = gameState.submissions[playerId]
+                      return (
+                        <div
+                          key={playerId}
+                          className={`w-2 h-2 rounded-full ${
+                            hasPlayerSubmitted ? 'bg-green-400' : 'bg-gray-400'
+                          }`}
+                          title={`Player ${
+                            connectedUsers.find((u) => u.userId === playerId)
+                              ?.nickname || 'Unknown'
+                          }`}
+                        />
+                      )
+                    })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
