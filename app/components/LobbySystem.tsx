@@ -7,6 +7,7 @@ import {
 import { useState, useEffect } from 'react'
 import { useAccount, usePublicClient } from 'wagmi'
 import { parseEther, formatEther } from 'viem'
+import { GAME_PHASES } from '../lib/constants'
 import {
   useWriteMirrorPitCreateLobby,
   useWriteMirrorPitJoinGame,
@@ -17,6 +18,7 @@ import {
 } from '../generated'
 import { web3config } from '../dapp.config'
 import { GameArena } from './GameArena'
+import { formatPlayerId } from '../lib/utils'
 
 // Lightweight lobby summary
 interface LobbySummary {
@@ -33,16 +35,14 @@ interface LobbyPlayers {
   paidPlayers: string[]
 }
 
+interface LobbySystemProps {
+  onActiveLobbyChange?: (lobbyId: string | null) => void
+}
+
 interface Message {
   userId: string
   text: string
   timestamp: number
-}
-
-// Helper function for safe player ID display
-const formatPlayerId = (id: string | null | undefined): string => {
-  if (!id) return 'Unknown'
-  return `Player ${id.slice(-4)}`
 }
 
 // Lobby Item Component
@@ -113,7 +113,7 @@ const LobbyItem = ({
   )
 }
 
-export default function LobbySystem() {
+export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
   const { writeContractAsync: createLobbyContract } =
@@ -128,18 +128,46 @@ export default function LobbySystem() {
   const [lobbies, setLobbies] = useStateTogether<LobbySummary[]>('lobbies', [])
 
   // Current user's active lobby - don't reset on disconnect anymore
-  const [activeLobby, setActiveLobby] = useStateTogetherWithPerUserValues<
+  const [activeLobby, setActiveLobbyState] = useStateTogetherWithPerUserValues<
     string | null
   >('active-lobby', null, { resetOnDisconnect: false })
 
+  // Notify parent component when active lobby changes
+  useEffect(() => {
+    onActiveLobbyChange?.(activeLobby)
+  }, [activeLobby, onActiveLobbyChange])
+
+  // Wrapper to ensure we update both local and parent state
+  const setActiveLobby = (lobbyId: string | null) => {
+    setActiveLobbyState(lobbyId)
+    onActiveLobbyChange?.(lobbyId)
+  }
+
+  // Get current lobby data
+  const currentLobby = lobbies.find((l) => l.id === activeLobby)
+
+  // Get game state for the current lobby
+  const [gameState] = useStateTogether(
+    currentLobby ? `game-${currentLobby.id}-state` : '',
+    {
+      round: 1,
+      phase: GAME_PHASES.READY_CHECK,
+      submissions: {},
+      eliminated: [],
+      timeRemaining: 30,
+      winners: [],
+      readyPlayers: [],
+    },
+  )
+
   // Per-lobby state when active
   const [lobbyPlayers, setLobbyPlayers] = useStateTogether<LobbyPlayers>(
-    activeLobby ? `lobby-${activeLobby}-players` : '',
+    currentLobby ? `lobby-${currentLobby.id}-players` : '',
     { players: [], paidPlayers: [] },
   )
 
   const [lobbyMessages, setLobbyMessages] = useStateTogether<Message[]>(
-    activeLobby ? `lobby-${activeLobby}-chat` : '',
+    currentLobby ? `lobby-${currentLobby.id}-chat` : '',
     [],
   )
 
@@ -150,7 +178,7 @@ export default function LobbySystem() {
   const [minPlayers, setMinPlayers] = useState(2)
   const [messageText, setMessageText] = useState('')
   const [isCreating, setIsCreating] = useState(false)
-  const [isJoining, setIsJoining] = useState(false)
+  const [joiningLobbyId, setJoiningLobbyId] = useState<string | null>(null)
 
   // Track paid status for all lobbies
   const [paidStatusMap, setPaidStatusMap] = useState<Record<string, boolean>>(
@@ -266,7 +294,7 @@ export default function LobbySystem() {
     if (!lobby) return
 
     try {
-      setIsJoining(true)
+      setJoiningLobbyId(gameId)
 
       // First check if already paid
       const hasPaid = await checkContractPayment(gameId, address)
@@ -291,7 +319,7 @@ export default function LobbySystem() {
     } catch (error) {
       console.error('Failed to join lobby:', error)
     } finally {
-      setIsJoining(false)
+      setJoiningLobbyId(null)
     }
   }
 
@@ -316,7 +344,10 @@ export default function LobbySystem() {
       timestamp: Date.now(),
     }
 
-    setLobbyMessages((prev) => [...prev, message])
+    setLobbyMessages((prev) => {
+      const currentMessages = Array.isArray(prev) ? prev : []
+      return [...currentMessages, message]
+    })
     setMessageText('')
   }
 
@@ -334,9 +365,6 @@ export default function LobbySystem() {
       console.error('Failed to end game:', error)
     }
   }
-
-  // Get current lobby data
-  const currentLobby = lobbies?.find((lobby) => lobby.id === activeLobby)
 
   // Check if current user has paid entry fee for a lobby
   const hasUserPaid = async (lobbyId: string) => {
@@ -369,71 +397,75 @@ export default function LobbySystem() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-4xl font-bold mb-8 text-center">Lobby System</h1>
+      <h1 className="text-4xl font-bold mb-8 text-center">
+        {activeLobby ? 'Game Arena' : 'Lobbies'}
+      </h1>
 
-      {/* Create Lobby Form */}
-      <div className="mb-8 p-4 bg-white/5 rounded-lg backdrop-blur-sm">
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newLobbyName}
-              onChange={(e) => setNewLobbyName(e.target.value)}
-              placeholder="Enter lobby name..."
-              className="flex-1 px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
-            />
-          </div>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block text-sm text-gray-400 mb-1">
-                Entry Fee (MON)
-              </label>
+      {/* Create Lobby Form - Only show if not in a lobby */}
+      {!activeLobby && (
+        <div className="mb-8 p-4 bg-white/5 rounded-lg backdrop-blur-sm">
+          <div className="space-y-4">
+            <div className="flex gap-2">
               <input
-                type="number"
-                value={entryFee}
-                onChange={(e) => {
-                  const value = e.target.value
-                  if (value === '' || parseFloat(value) >= 0) {
-                    setEntryFee(value)
-                  }
-                }}
-                min="0"
-                step="0.01"
-                className="w-full px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
+                type="text"
+                value={newLobbyName}
+                onChange={(e) => setNewLobbyName(e.target.value)}
+                placeholder="Enter lobby name..."
+                className="flex-1 px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
               />
             </div>
-            <div className="flex-1">
-              <label className="block text-sm text-gray-400 mb-1">
-                Min Players
-              </label>
-              <input
-                type="number"
-                value={minPlayers}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value)
-                  if (!isNaN(value) && value >= 2) {
-                    setMinPlayers(value)
-                  }
-                }}
-                min="2"
-                className="w-full px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
-              />
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-sm text-gray-400 mb-1">
+                  Entry Fee (MON)
+                </label>
+                <input
+                  type="number"
+                  value={entryFee}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === '' || parseFloat(value) >= 0) {
+                      setEntryFee(value)
+                    }
+                  }}
+                  min="0"
+                  step="0.01"
+                  className="w-full px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm text-gray-400 mb-1">
+                  Min Players
+                </label>
+                <input
+                  type="number"
+                  value={minPlayers}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value)
+                    if (!isNaN(value) && value >= 2) {
+                      setMinPlayers(value)
+                    }
+                  }}
+                  min="2"
+                  className="w-full px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
+                />
+              </div>
             </div>
+            <button
+              onClick={createLobby}
+              disabled={!isConnected || isCreating || !newLobbyName.trim()}
+              className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
+            >
+              {isCreating ? 'Creating...' : 'Create Lobby'}
+            </button>
+            {!isConnected && (
+              <p className="text-sm text-red-400">
+                Connect wallet to create lobbies
+              </p>
+            )}
           </div>
-          <button
-            onClick={createLobby}
-            disabled={!isConnected || isCreating || !newLobbyName.trim()}
-            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
-          >
-            {isCreating ? 'Creating...' : 'Create Lobby'}
-          </button>
-          {!isConnected && (
-            <p className="text-sm text-red-400">
-              Connect wallet to create lobbies
-            </p>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Active Lobby Chat or Lobby List */}
       {currentLobby && lobbyPlayers ? (
@@ -481,59 +513,67 @@ export default function LobbySystem() {
             </div>
           </div>
 
-          <div className="flex justify-between">
-            <div className="arena w-3/4">
+          <div className="flex justify-between gap-4">
+            <div
+              className={`arena ${
+                gameState?.phase === GAME_PHASES.READY_CHECK
+                  ? 'w-1/4'
+                  : 'w-full'
+              }`}
+            >
               <GameArena
                 lobbyId={currentLobby.id}
                 minPlayers={currentLobby.minPlayers}
               />
             </div>
-            <div className="chat w-1/4">
-              {/* Chat Messages */}
-              <div className="h-96 p-4 bg-white/5 rounded-lg backdrop-blur-sm space-y-4 overflow-y-auto">
-                {Array.isArray(lobbyMessages) &&
-                  lobbyMessages.map((msg, idx) => {
-                    const user = connectedUsers?.find(
-                      (u) => u.userId === msg.userId,
-                    )
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-3 rounded-lg ${
-                          msg.userId === myId
-                            ? 'bg-blue-500/20 ml-auto'
-                            : 'bg-white/10'
-                        } max-w-[80%]`}
-                      >
-                        <div className="text-sm font-bold mb-1">
-                          {user?.nickname || formatPlayerId(msg.userId)}
-                          {msg.userId === myId && ' (You)'}
+            {gameState?.phase === GAME_PHASES.READY_CHECK && (
+              <div className="chat w-3/4">
+                {/* Chat Messages */}
+                <div className="h-84 p-4 bg-white/5 rounded-lg backdrop-blur-sm space-y-4 overflow-y-auto">
+                  {Array.isArray(lobbyMessages) &&
+                    lobbyMessages.map((msg, idx) => {
+                      const user = connectedUsers?.find(
+                        (u) => u.userId === msg.userId,
+                      )
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-lg ${
+                            msg.userId === myId
+                              ? 'bg-blue-500/20 ml-auto'
+                              : 'bg-white/10'
+                          } max-w-[80%]`}
+                        >
+                          <div className="text-sm font-bold mb-1">
+                            {user?.nickname || formatPlayerId(msg.userId)}
+                            {msg.userId === myId && ' (You)'}
+                          </div>
+                          <div>{msg.text}</div>
                         </div>
-                        <div>{msg.text}</div>
-                      </div>
-                    )
-                  })}
-              </div>
+                      )
+                    })}
+                </div>
 
-              {/* Message Input */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                  placeholder="Type a message..."
-                  className="flex-1 px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={!messageText.trim()}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
-                >
-                  Send
-                </button>
+                {/* Message Input */}
+                <div className="flex gap-2 mt-4">
+                  <input
+                    type="text"
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder="Type a message..."
+                    className="flex-1 px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
+                  />
+                  <button
+                    onClick={sendMessage}
+                    disabled={!messageText.trim()}
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
+                  >
+                    Send
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       ) : (
@@ -550,7 +590,7 @@ export default function LobbySystem() {
                   key={lobby.id}
                   lobby={lobby}
                   isConnected={isConnected}
-                  isJoining={isJoining}
+                  isJoining={joiningLobbyId === lobby.id}
                   paidStatusMap={paidStatusMap}
                   onJoin={joinLobby}
                   onDelete={deleteLobby}

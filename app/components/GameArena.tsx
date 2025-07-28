@@ -10,6 +10,7 @@ import {
   GAME_PHASES,
   type GamePhase,
 } from '../lib/constants'
+import { formatPlayerId } from '../lib/utils'
 
 // Game state interface
 interface GameState {
@@ -17,6 +18,7 @@ interface GameState {
   phase: GamePhase
   submissions: Record<string, GameAction[]>
   eliminated: string[]
+  eliminationOrder: { playerId: string; round: number }[] // Track when players were eliminated
   timeRemaining: number
   winners: string[]
   readyPlayers: string[] // Track players who are ready
@@ -31,12 +33,6 @@ interface LobbyPlayers {
 interface GameArenaProps {
   lobbyId: string
   minPlayers: number
-}
-
-// Helper function for safe player ID display
-const formatPlayerId = (id: string | null | undefined): string => {
-  if (!id) return 'Unknown'
-  return `Player ${id.slice(-4)}`
 }
 
 export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
@@ -57,6 +53,7 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
       phase: GAME_PHASES.READY_CHECK,
       submissions: {},
       eliminated: [],
+      eliminationOrder: [],
       timeRemaining: ROUND_DURATION,
       winners: [],
       readyPlayers: [],
@@ -133,7 +130,9 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
     setSelectedActions([])
   }
 
-  // Check for eliminations when all players have submitted
+  // Update elimination tracking in both places where players can be eliminated
+
+  // 1. When checking for duplicates
   useEffect(() => {
     if (gameState.phase !== GAME_PHASES.INPUT) return
 
@@ -155,17 +154,24 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
         return hasDuplicate ? [...acc, playerId] : acc
       }, [] as string[])
 
-      // Update game state
+      // Update game state with elimination order
       setGameState((prev) => ({
         ...prev,
         phase: GAME_PHASES.REVEAL,
         eliminated: [...prev.eliminated, ...eliminated],
+        eliminationOrder: [
+          ...prev.eliminationOrder,
+          ...eliminated.map((playerId) => ({
+            playerId,
+            round: prev.round,
+          })),
+        ],
         timeRemaining: REVEAL_DURATION,
       }))
     }
   }, [gameState.submissions, lobbyPlayers])
 
-  // Handle round timer
+  // 2. When time runs out
   useEffect(() => {
     if (gameState.timeRemaining <= 0) {
       if (gameState.phase === GAME_PHASES.INPUT) {
@@ -183,6 +189,13 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
           ...prev,
           phase: GAME_PHASES.REVEAL,
           eliminated: [...prev.eliminated, ...notSubmittedPlayers],
+          eliminationOrder: [
+            ...prev.eliminationOrder,
+            ...notSubmittedPlayers.map((playerId) => ({
+              playerId,
+              round: prev.round,
+            })),
+          ],
           timeRemaining: REVEAL_DURATION,
         }))
       } else if (gameState.phase === GAME_PHASES.REVEAL) {
@@ -199,7 +212,7 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
             winners: activePlayers,
           }))
         } else {
-          // Next round - no need to reset ready state
+          // Next round
           setGameState((prev) => ({
             ...prev,
             round: prev.round + 1,
@@ -236,7 +249,7 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
       <div className="terminal-header">
         <h2 className="text-2xl font-bold animate-retro-glow">
           {gameState.phase === GAME_PHASES.READY_CHECK
-            ? 'Ready Check'
+            ? 'Status'
             : `Round ${gameState.round}`}
         </h2>
         {(gameState.phase === GAME_PHASES.INPUT ||
@@ -254,29 +267,11 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
       {gameState.phase === GAME_PHASES.READY_CHECK && (
         <div className="space-y-6">
           <div className="text-center">
-            <p className="text-lg mb-4">
-              Waiting for players... ({gameState.readyPlayers.length} /{' '}
+            <p className="text-lg mb-4">Waiting for players...</p>
+            <p>
+              ({gameState.readyPlayers.length} /{' '}
               {Math.max(minPlayers, lobbyPlayers?.players?.length || 0)} ready)
             </p>
-            {/* Players List */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {/* Only show players who have joined the lobby */}
-              {(lobbyPlayers?.players || []).map((playerId) => {
-                const user = connectedUsers?.find((u) => u.userId === playerId)
-                const isReady = gameState.readyPlayers.includes(playerId)
-                return (
-                  <div
-                    key={playerId}
-                    className={`p-4 rounded ${
-                      isReady ? 'bg-green-500/20' : 'bg-white/10'
-                    }`}
-                  >
-                    <span>{user?.nickname || formatPlayerId(playerId)}</span>
-                    <span className="ml-2">{isReady ? '✓' : '...'}</span>
-                  </div>
-                )
-              })}
-            </div>
             {/* Ready Button - only show if player has joined */}
             {myId && lobbyPlayers?.players?.includes(myId) && (
               <Button
@@ -427,18 +422,48 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
       {gameState.phase === GAME_PHASES.END && (
         <div className="text-center space-y-4 animate-fade-in">
           <h3 className="text-2xl font-bold animate-celebrate">Game Over!</h3>
-          <div className="survivors-list">
-            <h4 className="text-xl">Winners:</h4>
-            {gameState.winners.map((winnerId, index) => (
-              <div key={winnerId} className="survivor-row">
-                <span className="rank">#{index + 1}</span>
-                <span>
-                  {connectedUsers.find((u) => u.userId === winnerId)
-                    ?.nickname || winnerId}
-                </span>
-                <span className="status animate-retro-glow">WINNER!</span>
-              </div>
-            ))}
+          <div className="space-y-6">
+            {/* <div className="winners-section">
+              <h4 className="text-xl text-green-400 mb-4">Winners:</h4>
+              {gameState.winners.map((winnerId) => (
+                <div
+                  key={winnerId}
+                  className="winner-row bg-green-500/20 p-3 rounded-lg animate-celebrate"
+                >
+                  <span className="font-bold">
+                    {connectedUsers.find((u) => u.userId === winnerId)
+                      ?.nickname || formatPlayerId(winnerId)}
+                  </span>
+                  <span className="text-green-400 ml-2">🏆 WINNER!</span>
+                </div>
+              ))}
+            </div> */}
+
+            <div className="eliminations-section">
+              <h4 className="text-xl text-yellow-400 mb-4">
+                Elimination Order:
+              </h4>
+              {(gameState.eliminationOrder || [])
+                .reverse()
+                .map((elimination, index) => (
+                  <div
+                    key={elimination.playerId}
+                    className="elimination-row p-2 bg-white/5 rounded-lg mb-2"
+                  >
+                    {/* <span className="text-gray-400">
+                      #{(gameState.eliminationOrder || []).length - index}.
+                    </span> */}
+                    <span className="ml-2">
+                      {connectedUsers.find(
+                        (u) => u.userId === elimination.playerId,
+                      )?.nickname || formatPlayerId(elimination.playerId)}
+                    </span>
+                    <span className="text-gray-500 ml-2">
+                      (Round {elimination.round})
+                    </span>
+                  </div>
+                ))}
+            </div>
           </div>
         </div>
       )}

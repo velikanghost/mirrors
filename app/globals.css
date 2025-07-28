@@ -69,10 +69,10 @@ body {
   opacity: 0.9;
 }
 
-.terminal-header::before {
+/* .terminal-header::before {
   content: '> > ';
   color: hsl(var(--color-neon));
-}
+} */
 
 /* Status cards */
 .status-grid {
