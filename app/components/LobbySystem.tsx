@@ -32,7 +32,7 @@ interface LobbySummary {
 // Per-lobby player state
 interface LobbyPlayers {
   players: string[]
-  paidPlayers: string[]
+  paidPlayers: Array<{ userId: string; walletAddress: string }>
 }
 
 interface LobbySystemProps {
@@ -234,7 +234,10 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
         // If paid, update react-together state to reflect this
         setLobbyPlayers((prev) => ({
           players: [...new Set([...prev.players, myId as string])],
-          paidPlayers: [...new Set([...prev.paidPlayers, address])],
+          paidPlayers: [
+            ...prev.paidPlayers.filter((p) => p.userId !== myId),
+            { userId: myId as string, walletAddress: address },
+          ],
         }))
       }
     }
@@ -314,7 +317,10 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
       // Update lobby players - ensure arrays exist with fallbacks
       setLobbyPlayers((prev) => ({
         players: [...new Set([...(prev?.players || []), myId])],
-        paidPlayers: [...new Set([...(prev?.paidPlayers || []), address])],
+        paidPlayers: [
+          ...(prev?.paidPlayers || []).filter((p) => p.userId !== myId),
+          { userId: myId, walletAddress: address },
+        ],
       }))
     } catch (error) {
       console.error('Failed to join lobby:', error)
@@ -496,7 +502,10 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
               {(lobbyPlayers?.players || []).map((playerId) => {
                 const user = connectedUsers?.find((u) => u.userId === playerId)
                 const hasPaid =
-                  address && (lobbyPlayers?.paidPlayers || []).includes(address)
+                  address &&
+                  (lobbyPlayers?.paidPlayers || []).some(
+                    (p) => p.userId === playerId && p.walletAddress === address,
+                  )
                 return (
                   <span
                     key={playerId}

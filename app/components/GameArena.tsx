@@ -27,7 +27,7 @@ interface GameState {
 // Per-lobby player state
 interface LobbyPlayers {
   players: string[]
-  paidPlayers: string[]
+  paidPlayers: Array<{ userId: string; walletAddress: string }>
 }
 
 interface GameArenaProps {
@@ -80,6 +80,33 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
         ? prev.readyPlayers.filter((id) => id !== myId)
         : [...prev.readyPlayers, myId],
     }))
+  }
+
+  // Distribute prizes via backend API
+  const distributePrizes = async (gameId: string, winnerUserIds: string[]) => {
+    try {
+      const response = await fetch('/api/game/end', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          gameId,
+          lobbyId: gameId,
+          winnerUserIds,
+          lobbyPlayers,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        console.log('Prizes distributed successfully:', result.transactionHash)
+      } else {
+        console.error('Failed to distribute prizes:', result.error)
+      }
+    } catch (error) {
+      console.error('Error calling prize distribution API:', error)
+    }
   }
 
   // Check if all players are ready
@@ -204,13 +231,18 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
           (id) => !gameState.eliminated.includes(id),
         )
 
-        if (activePlayers.length <= 1) {
-          // Game over - we have winner(s)
+        if (activePlayers.length <= 2) {
+          // Game over - we have winner(s) (last 2 players remaining)
           setGameState((prev) => ({
             ...prev,
             phase: GAME_PHASES.END,
             winners: activePlayers,
           }))
+
+          // Trigger prize distribution via backend API
+          if (activePlayers.length > 0) {
+            distributePrizes(lobbyId, activePlayers)
+          }
         } else {
           // Next round
           setGameState((prev) => ({
@@ -423,21 +455,25 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
         <div className="text-center space-y-4 animate-fade-in">
           <h3 className="text-2xl font-bold animate-celebrate">Game Over!</h3>
           <div className="space-y-6">
-            {/* <div className="winners-section">
+            {/* Winners Section */}
+            <div className="winners-section">
               <h4 className="text-xl text-green-400 mb-4">Winners:</h4>
               {gameState.winners.map((winnerId) => (
                 <div
                   key={winnerId}
-                  className="winner-row bg-green-500/20 p-3 rounded-lg animate-celebrate"
+                  className="winner-row bg-green-500/20 p-3 rounded-lg animate-celebrate mb-2"
                 >
                   <span className="font-bold">
                     {connectedUsers.find((u) => u.userId === winnerId)
-                      ?.nickname || formatPlayerId(winnerId)}
+                      ?.nickname || winnerId}
                   </span>
                   <span className="text-green-400 ml-2">🏆 WINNER!</span>
                 </div>
               ))}
-            </div> */}
+              <div className="text-sm text-gray-400 mt-2">
+                Prizes are being distributed to winners' wallets...
+              </div>
+            </div>
 
             <div className="eliminations-section">
               <h4 className="text-xl text-yellow-400 mb-4">
