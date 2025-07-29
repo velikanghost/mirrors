@@ -5,7 +5,6 @@ import { monadTestnet } from 'viem/chains'
 import { mirrorPitAbi } from '@/app/generated'
 import { web3config } from '@/app/dapp.config'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -47,6 +46,7 @@ export async function POST(request: NextRequest) {
     if (lobbyPlayers?.paidPlayers) {
       for (const winnerId of winnerUserIds) {
         const playerData = lobbyPlayers.paidPlayers.find(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (p: any) => p.userId === winnerId,
         )
         if (playerData?.walletAddress) {
@@ -81,6 +81,8 @@ export async function POST(request: NextRequest) {
       winnerAddresses,
       gameId,
     })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('Failed to distribute prizes:', error)
     return NextResponse.json(
