@@ -3,6 +3,7 @@
 import { ReactTogether, useConnectedUsers } from 'react-together'
 import { useSearchParams } from 'next/navigation'
 import { ConnectButton } from './ui/ConnectButton'
+import { ConnectionStatus } from './ui/ConnectionStatus'
 
 interface ReactTogetherWrapperProps {
   children: React.ReactNode
@@ -39,6 +40,7 @@ export default function ReactTogetherWrapper({
               </div>
 
               <div className="flex items-center space-x-4">
+                <ConnectionStatus />
                 <ConnectedUsersDisplay />
                 <ConnectButton />
               </div>

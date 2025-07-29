@@ -1,4 +1,6 @@
 export * from './Button'
 export * from './Card'
+export * from './ConnectButton'
 export * from './Input'
 export * from './Tooltip'
+export * from './ConnectionStatus'

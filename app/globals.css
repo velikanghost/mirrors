@@ -18,6 +18,10 @@ body {
   font-family: var(--font-pixel);
 }
 
+#croquet_spinnerOverlay {
+  display: none;
+}
+
 /* Scanlines effect */
 .scanlines {
   position: fixed;
