@@ -5,6 +5,7 @@ import { monadTestnet } from 'viem/chains'
 import { mirrorPitAbi } from '@/app/generated'
 import { web3config } from '@/app/dapp.config'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
