@@ -471,7 +471,7 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
                 </div>
               ))}
               <div className="text-sm text-gray-400 mt-2">
-                Prizes are being distributed to winners' wallets...
+                Prizes are being distributed to winners wallets...
               </div>
             </div>
 
