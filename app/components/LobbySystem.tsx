@@ -281,6 +281,10 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
       }
 
       setLobbies((prev) => [...prev, newLobby])
+
+      // Automatically join the lobby as creator
+      //await joinLobby(gameId)
+
       setNewLobbyName('')
     } catch (error) {
       console.error('Failed to create lobby:', error)

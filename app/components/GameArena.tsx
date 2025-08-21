@@ -1,5 +1,5 @@
 import { useStateTogether, useConnectedUsers, useMyId } from 'react-together'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button } from './ui/Button'
 import {
   ROUND_DURATION,
@@ -272,8 +272,12 @@ export const GameArena = ({ lobbyId, minPlayers }: GameArenaProps) => {
     }
   }, [gameState.timeRemaining, gameState.phase, lobbyPlayers])
 
+  const hasSubmitted = useMemo(() => {
+    return myId ? Boolean(gameState.submissions[myId]) : false
+  }, [myId, gameState.submissions])
+
   // Helper function to check if current player has submitted
-  const hasSubmitted = myId && gameState.submissions[myId]
+  //const hasSubmitted = myId && gameState.submissions[myId]
 
   return (
     <div className="terminal-section">
