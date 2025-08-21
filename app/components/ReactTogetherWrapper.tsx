@@ -4,6 +4,8 @@ import { ReactTogether, useConnectedUsers } from 'react-together'
 import { useSearchParams } from 'next/navigation'
 import { ConnectButton } from './ui/ConnectButton'
 import { ConnectionStatus } from './ui/ConnectionStatus'
+import { ErrorDisplay } from './ui/ErrorDisplay'
+import { LoadingIndicator } from './ui/LoadingIndicator'
 
 interface ReactTogetherWrapperProps {
   children: React.ReactNode
@@ -49,6 +51,10 @@ export default function ReactTogetherWrapper({
         </nav>
 
         <main className="relative z-10">{children}</main>
+
+        {/* Global UI Components */}
+        <ErrorDisplay />
+        <LoadingIndicator />
       </div>
     </ReactTogether>
   )
