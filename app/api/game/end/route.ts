@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createWalletClient, http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { monadTestnet } from 'viem/chains'
-import { mirrorPitAbi } from '@/app/generated'
-import { web3config } from '@/app/dapp.config'
+import { mirrorPitAbi } from '@/app/lib/generated'
+import { web3config } from '@/app/lib/dapp.config'
 
 export async function POST(request: NextRequest) {
   try {

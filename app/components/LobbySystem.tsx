@@ -13,36 +13,30 @@ import {
   useWriteMirrorPitJoinGame,
   useWriteMirrorPitDistributePrizes,
   useWriteMirrorPitDeleteLobby,
-  useReadMirrorPitHasPlayerJoined,
   mirrorPitAbi,
-} from '../generated'
-import { web3config } from '../dapp.config'
+} from '../lib/generated'
+import { web3config } from '../lib/dapp.config'
 import { GameArena } from './GameArena'
 import { formatPlayerId } from '../lib/utils'
-
-// Lightweight lobby summary
-interface LobbySummary {
-  id: string
-  name: string
-  entryFeeWei: string // stringify BigInt
-  minPlayers: number
-  creator: string
-}
-
-// Per-lobby player state
-interface LobbyPlayers {
-  players: string[]
-  paidPlayers: Array<{ userId: string; walletAddress: string }>
-}
-
+import { LobbySummary, LobbyPlayers, Message } from '../types'
+import { useAppDispatch, useAppSelector } from '../lib/store/hooks'
+import {
+  setLobbyName,
+  setEntryFee,
+  setMinPlayers,
+  setLobbyCreating,
+  resetLobbyForm,
+  setChatMessage,
+  clearChatMessage,
+  setCreatingLobby,
+  setJoiningLobby,
+  setDistributingPrizes,
+  setDeletingLobby,
+  addContractError,
+  addNetworkError,
+} from '../lib/store'
 interface LobbySystemProps {
   onActiveLobbyChange?: (lobbyId: string | null) => void
-}
-
-interface Message {
-  userId: string
-  text: string
-  timestamp: number
 }
 
 // Lobby Item Component
@@ -173,14 +167,15 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
 
   const myId = useMyId()
   const connectedUsers = useConnectedUsers()
-  const [newLobbyName, setNewLobbyName] = useState('')
-  const [entryFee, setEntryFee] = useState('0.01')
-  const [minPlayers, setMinPlayers] = useState(2)
-  const [messageText, setMessageText] = useState('')
-  const [isCreating, setIsCreating] = useState(false)
-  const [joiningLobbyId, setJoiningLobbyId] = useState<string | null>(null)
 
-  // Track paid status for all lobbies
+  // Redux state
+  const dispatch = useAppDispatch()
+  const { lobbyCreation, chat } = useAppSelector((state) => state.forms)
+  const { creatingLobby, joiningLobby } = useAppSelector(
+    (state) => state.loading,
+  )
+
+  // Local state that doesn't need Redux
   const [paidStatusMap, setPaidStatusMap] = useState<Record<string, boolean>>(
     {},
   )
@@ -247,17 +242,18 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
 
   // Create a new lobby
   const createLobby = async () => {
-    if (!isConnected || !address || !newLobbyName.trim() || !publicClient)
+    if (!isConnected || !address || !lobbyCreation.name.trim() || !publicClient)
       return
 
     try {
-      setIsCreating(true)
-      const entryFeeWei = parseEther(entryFee)
+      dispatch(setLobbyCreating(true))
+      dispatch(setCreatingLobby(true))
+      const entryFeeWei = parseEther(lobbyCreation.entryFee)
 
       // Create vault in contract
       const hash = await createLobbyContract({
         address: web3config.contractAddress as `0x${string}`,
-        args: [entryFeeWei, BigInt(minPlayers)],
+        args: [entryFeeWei, BigInt(lobbyCreation.minPlayers)],
       })
 
       // Wait for transaction and get game ID
@@ -274,9 +270,9 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
       // Create lightweight lobby summary
       const newLobby: LobbySummary = {
         id: gameId,
-        name: newLobbyName.trim(),
+        name: lobbyCreation.name.trim(),
         entryFeeWei: entryFeeWei.toString(), // stringify BigInt
-        minPlayers,
+        minPlayers: lobbyCreation.minPlayers,
         creator: address,
       }
 
@@ -285,11 +281,18 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
       // Automatically join the lobby as creator
       //await joinLobby(gameId)
 
-      setNewLobbyName('')
+      dispatch(resetLobbyForm())
     } catch (error) {
       console.error('Failed to create lobby:', error)
+      dispatch(
+        addContractError({
+          message: 'Failed to create lobby',
+          type: 'create',
+        }),
+      )
     } finally {
-      setIsCreating(false)
+      dispatch(setLobbyCreating(false))
+      dispatch(setCreatingLobby(false))
     }
   }
 
@@ -301,7 +304,7 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
     if (!lobby) return
 
     try {
-      setJoiningLobbyId(gameId)
+      dispatch(setJoiningLobby(gameId))
 
       // First check if already paid
       const hasPaid = await checkContractPayment(gameId, address)
@@ -328,8 +331,15 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
       }))
     } catch (error) {
       console.error('Failed to join lobby:', error)
+      dispatch(
+        addContractError({
+          message: 'Failed to join lobby',
+          type: 'join',
+          lobbyId: gameId,
+        }),
+      )
     } finally {
-      setJoiningLobbyId(null)
+      dispatch(setJoiningLobby(null))
     }
   }
 
@@ -346,11 +356,11 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
 
   // Send a message in current lobby
   const sendMessage = () => {
-    if (!messageText.trim() || !activeLobby || !myId) return
+    if (!chat.messageText.trim() || !activeLobby || !myId) return
 
     const message: Message = {
       userId: myId,
-      text: messageText.trim(),
+      text: chat.messageText.trim(),
       timestamp: Date.now(),
     }
 
@@ -358,7 +368,7 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
       const currentMessages = Array.isArray(prev) ? prev : []
       return [...currentMessages, message]
     })
-    setMessageText('')
+    dispatch(clearChatMessage())
   }
 
   // End game and distribute prizes
@@ -418,8 +428,8 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
             <div className="flex gap-2">
               <input
                 type="text"
-                value={newLobbyName}
-                onChange={(e) => setNewLobbyName(e.target.value)}
+                value={lobbyCreation.name}
+                onChange={(e) => dispatch(setLobbyName(e.target.value))}
                 placeholder="Enter lobby name..."
                 className="flex-1 px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
               />
@@ -431,11 +441,11 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
                 </label>
                 <input
                   type="number"
-                  value={entryFee}
+                  value={lobbyCreation.entryFee}
                   onChange={(e) => {
                     const value = e.target.value
                     if (value === '' || parseFloat(value) >= 0) {
-                      setEntryFee(value)
+                      dispatch(setEntryFee(value))
                     }
                   }}
                   min="0"
@@ -449,11 +459,11 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
                 </label>
                 <input
                   type="number"
-                  value={minPlayers}
+                  value={lobbyCreation.minPlayers}
                   onChange={(e) => {
                     const value = parseInt(e.target.value)
                     if (!isNaN(value) && value >= 2) {
-                      setMinPlayers(value)
+                      dispatch(setMinPlayers(value))
                     }
                   }}
                   min="2"
@@ -463,10 +473,12 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
             </div>
             <button
               onClick={createLobby}
-              disabled={!isConnected || isCreating || !newLobbyName.trim()}
+              disabled={
+                !isConnected || creatingLobby || !lobbyCreation.name.trim()
+              }
               className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
             >
-              {isCreating ? 'Creating...' : 'Create Lobby'}
+              {creatingLobby ? 'Creating...' : 'Create Lobby'}
             </button>
             {!isConnected && (
               <p className="text-sm text-red-400">
@@ -571,15 +583,15 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
                 <div className="flex gap-2 mt-4">
                   <input
                     type="text"
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
+                    value={chat.messageText}
+                    onChange={(e) => dispatch(setChatMessage(e.target.value))}
                     onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                     placeholder="Type a message..."
                     className="flex-1 px-4 py-2 bg-white/10 rounded border border-white/20 text-white"
                   />
                   <button
                     onClick={sendMessage}
-                    disabled={!messageText.trim()}
+                    disabled={!chat.messageText.trim()}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition"
                   >
                     Send
@@ -603,7 +615,7 @@ export default function LobbySystem({ onActiveLobbyChange }: LobbySystemProps) {
                   key={lobby.id}
                   lobby={lobby}
                   isConnected={isConnected}
-                  isJoining={joiningLobbyId === lobby.id}
+                  isJoining={joiningLobby === lobby.id}
                   paidStatusMap={paidStatusMap}
                   onJoin={joinLobby}
                   onDelete={deleteLobby}

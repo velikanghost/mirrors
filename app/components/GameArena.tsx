@@ -8,27 +8,9 @@ import {
   type GameAction,
   COMBO_LENGTH,
   GAME_PHASES,
-  type GamePhase,
 } from '../lib/constants'
 import { formatPlayerId } from '../lib/utils'
-
-// Game state interface
-interface GameState {
-  round: number
-  phase: GamePhase
-  submissions: Record<string, GameAction[]>
-  eliminated: string[]
-  eliminationOrder: { playerId: string; round: number }[] // Track when players were eliminated
-  timeRemaining: number
-  winners: string[]
-  readyPlayers: string[] // Track players who are ready
-}
-
-// Per-lobby player state
-interface LobbyPlayers {
-  players: string[]
-  paidPlayers: Array<{ userId: string; walletAddress: string }>
-}
+import { GameState, LobbyPlayers } from '../types'
 
 interface GameArenaProps {
   lobbyId: string
